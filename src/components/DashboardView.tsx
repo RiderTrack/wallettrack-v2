@@ -1,17 +1,18 @@
 // ═══════════════════════════════════════════════════════════
 // 🏠 DASHBOARD — WalletTrack V2 (F0)
 // Balance consolidado + ingresos/gastos del mes + cuentas +
-// gastos rápidos de 1 toque + últimos movimientos. Los módulos
-// pesados (presupuestos, metas, deudas, sobres, WalletBot)
-// aterrizan en F1-F3 desde el menú ☰.
+// gastos rápidos de 1 toque + últimos movimientos + (F4) la
+// tarjeta del WalletBot con los 2 avisos más importantes del
+// análisis del mes — el bot completo vive en su vista (☰).
 // ═══════════════════════════════════════════════════════════
 
 import React from 'react';
-import { TrendingUp, TrendingDown, PlusCircle, MinusCircle, ArrowRight, Zap, Wallet, ArrowLeftRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, PlusCircle, MinusCircle, ArrowRight, Zap, Wallet, ArrowLeftRight, Bot } from 'lucide-react';
 import type { EstadoWallet, VistaApp } from '../types';
 import { CUENTAS_CATALOG } from '../data/catalogos';
 import { soles, fechaCorta, nombreMesActual } from '../services/dinero';
 import { saldoCuenta, saldoTotal, resumenMes, movimientosDeCuenta } from '../services/estado';
+import { analizarWallet, COLOR_MAP } from '../services/walletbot';
 
 interface DashboardViewProps {
   estado: EstadoWallet;
@@ -25,6 +26,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
   const { ingresos, gastos } = resumenMes(estado);
   const recientes = estado.transactions.slice(0, 8);
   const cuenta = (id?: string) => CUENTAS_CATALOG.find((c) => c.id === (id ?? 'efectivo'));
+  // F4: los 2 avisos más prioritarios del mes (mismo motor del bot)
+  const avisosBot = analizarWallet(estado).slice(0, 2);
 
   return (
     <div className="space-y-5 wt-aparece" data-testid="vista-dashboard">
@@ -141,6 +144,59 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
               </button>
             );
           })}
+        </div>
+      </section>
+
+      {/* ── 🤖 WalletBot (mismos avisos priorizados del viejo) ── */}
+      <section
+        data-testid="tarjeta-walletbot-dashboard"
+        className="rounded-3xl bg-slate-900 border border-indigo-500/20 p-5 relative overflow-hidden"
+      >
+        <div className="absolute -right-20 -bottom-20 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+        <div className="flex items-center justify-between mb-3 relative">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 shrink-0">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 truncate">
+                WalletBot
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/20 text-indigo-300 font-bold uppercase">IA</span>
+              </h3>
+              <span className="text-[11px] text-slate-400 block truncate">Análisis del mes en curso</span>
+            </div>
+          </div>
+          <button
+            onClick={() => onIr('walletbot')}
+            data-testid="boton-ver-walletbot"
+            className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 shrink-0"
+          >
+            Ver bot <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+        <div className="space-y-2 relative">
+          {avisosBot.map((m, i) => {
+            const c = COLOR_MAP[m.type];
+            return (
+              <div
+                key={i}
+                className="flex items-start gap-2.5 p-2.5 rounded-xl border"
+                style={{ background: c.bg, borderColor: c.border }}
+              >
+                <span className="text-sm leading-none mt-0.5 shrink-0">{m.icon}</span>
+                <span
+                  className="text-[11px] leading-relaxed [&_strong]:font-bold line-clamp-2"
+                  style={{ color: c.text }}
+                  dangerouslySetInnerHTML={{ __html: m.text }}
+                />
+              </div>
+            );
+          })}
+          {avisosBot.length === 0 && (
+            <p className="text-[11px] text-slate-500 text-center py-2">
+              Registra movimientos y el bot te avisa lo más importante del mes.
+            </p>
+          )}
         </div>
       </section>
 

@@ -174,6 +174,22 @@ export interface CompraHistorial {
   items: ItemCompra[];            // snapshot de la lista al cerrar
 }
 
+// ── F4 · Theme Studio (forma EXACTA del viejo: wallettrack_theme) ──
+export interface TemaWallet {
+  accent: string;          // '#10b981' por defecto (emerald del original)
+  name: string;            // 'emerald' | 'blue' | ... | 'custom'
+  glass: boolean;          // legacy del viejo (mantenido por compatibilidad)
+  glassOpacity: number;    // 0.3–0.95 · alpha de las tarjetas
+  brightness: 'deep' | 'soft-dark' | 'neutro' | 'soft-light' | 'light';
+  style: 'minimal' | 'premium' | 'gaming' | 'neon' | 'elegante';
+  background: 'none' | 'particles' | 'gradient' | 'aurora' | 'pulse' | 'matrix';
+  compact: boolean;        // modo compacto
+  fontSize: number;        // 80–120 (%)
+  font: 'Inter' | 'Outfit' | 'Roboto' | 'Poppins' | 'Nunito' | 'mono';
+  cardRadius: 'square' | 'rounded' | 'pill';
+  animSpeed: 'fast' | 'normal' | 'slow' | 'none';
+}
+
 // ── Estado global (espejo del AppState del viejo) ─────────────
 export interface EstadoWallet {
   transactions: Transaccion[];

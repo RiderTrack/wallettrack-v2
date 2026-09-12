@@ -45,4 +45,52 @@
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.wt-aparece { animation: wtAparece .25s ease-out; }
+.wt-aparece { animation: wtAparece calc(.25s * var(--anim-speed, 1)) ease-out; }
+
+/* ═══════════════════════════════════════════════════════════
+   🎨 F4 · THEME STUDIO (portado del original)
+   El motor (services/tema.ts) sobreescribe las vars de Tailwind
+   (--color-slate-* / --color-emerald-* / --color-white) en :root
+   y estas reglas conectan los estilos del studio con la app.
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --wt-accent: #10b981;                 /* acento vivo (para estilos gaming/neón) */
+  --wt-radius: 24px;                    /* radio del estilo de componentes */
+  --wt-sombra: 0 8px 32px rgba(0,0,0,.37);
+  --anim-speed: 1;                      /* multiplicador de animaciones */
+}
+
+/* El fondo lo pinta el <body> (color + gradientes sutiles del
+   original) → el root de la app se vuelve transparente para que
+   se vea, y el canvas de fondos animados pasa por debajo. */
+body.wt-tema-activo .wt-root { background-color: transparent; }
+
+/* Estilo de componentes — mismas clases que el viejo tocaba
+   (.premium-glass / .rounded-3xl / .rounded-2xl): radio y
+   sombra según el estilo elegido. */
+body[data-estilo] .rounded-3xl,
+body[data-estilo] .rounded-2xl {
+  border-radius: var(--wt-radius);
+  box-shadow: var(--wt-sombra);
+}
+/* Los bordes de acento solo en gaming/neón (en el resto el
+   borde propio de cada tarjeta se mantiene — adaptación segura
+   de los STYLE_CONFIGS del viejo a la V2) */
+body[data-estilo='gaming'] .rounded-3xl,
+body[data-estilo='gaming'] .rounded-2xl { border: 2px solid var(--wt-accent); }
+body[data-estilo='neon'] .rounded-3xl,
+body[data-estilo='neon'] .rounded-2xl   { border: 1px solid var(--wt-accent); box-shadow: 0 0 30px rgba(var(--wt-accent-rgb, 16 185 129), .15); }
+body[data-estilo='minimal'] .rounded-3xl,
+body[data-estilo='minimal'] .rounded-2xl { box-shadow: none; }
+
+/* Modo compacto: menos aire entre tarjetas y paddings chicos
+   (solo dentro de main — modales y drawer quedan normales) */
+body.wt-compact main .space-y-4 > :not(:last-child) { margin-block-end: .5rem; }
+body.wt-compact main .space-y-5 > :not(:last-child) { margin-block-end: .6rem; }
+body.wt-compact main .space-y-6 > :not(:last-child) { margin-block-end: .75rem; }
+body.wt-compact main .rounded-3xl { padding: .9rem; }
+body.wt-compact main { padding-top: .75rem; }
+
+/* Modo claro nativo (scrollbars, inputs, date pickers) */
+body.theme-light { color-scheme: light; }

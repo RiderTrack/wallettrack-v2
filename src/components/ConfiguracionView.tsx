@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Download, Upload, Wallet, Smartphone, Map, CheckCircle2, AlertTriangle,
-  Cloud, CloudDownload, CloudUpload, RefreshCw, LogIn, Loader2,
+  Cloud, CloudDownload, CloudUpload, RefreshCw, LogIn, Loader2, Palette,
 } from 'lucide-react';
 import type { EstadoWallet } from '../types';
 import { esAPK, nombrePlataforma, versionApp } from '../services/platform';
@@ -20,6 +20,7 @@ import {
   suscribirSync, type EstadoSyncUI,
 } from '../services/sync';
 import { compartirArchivo, nombreRespaldo } from '../services/archivo';
+import { leerTema } from '../services/tema';
 import type { CuentaUsuario } from '../hooks/useAuth';
 
 interface ConfiguracionViewProps {
@@ -28,11 +29,12 @@ interface ConfiguracionViewProps {
   modoLocal: boolean;
   onImportar: (textoJSON: string) => boolean; // true si ok
   onIniciarSesion: () => void;    // F1: salir del modo local → LoginScreen
+  onAbrirStudio?: () => void;     // F4: abrir el Theme Studio (🎨 del header)
   onToast: (mensaje: string) => void;
 }
 
 export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
-  estado, cuenta, modoLocal, onImportar, onIniciarSesion, onToast,
+  estado, cuenta, modoLocal, onImportar, onIniciarSesion, onAbrirStudio, onToast,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [confirmandoImport, setConfirmandoImport] = useState(false);
@@ -44,6 +46,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
   const [syncTrabajando, setSyncTrabajando] = useState(false);
   const [confirmRestaurar, setConfirmRestaurar] = useState(false);
   const [confirmSubir, setConfirmSubir] = useState(false);
+
+  // F4: resumen del tema activo (se lee al montar la vista)
+  const temaActual = useRef(leerTema()).current;
 
   const hace = (epoch: number | null): string => {
     if (!epoch) return 'nunca';
@@ -303,6 +308,38 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
         )}
       </section>
 
+      {/* ── Apariencia (F4 · Theme Studio) ─────────────────────── */}
+      <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5">
+        <h3 className="font-bold text-slate-200 text-base mb-1 flex items-center gap-2">
+          <Palette className="w-4 h-4 text-emerald-400" /> Apariencia · Theme Studio
+        </h3>
+        <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+          9 temas de color, 5 niveles de luminosidad, 5 estilos de componentes, fondos animados,
+          tipografía y modo compacto — todo se aplica en vivo y se guarda en este aparato.
+        </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0" data-testid="resumen-tema">
+            <span
+              className="w-6 h-6 rounded-full border border-slate-600 shrink-0"
+              style={{ background: temaActual.accent }}
+            />
+            <p className="text-xs text-slate-300 font-semibold truncate">
+              {temaActual.name === 'custom' ? 'Custom' : temaActual.name} · {temaActual.brightness} · {temaActual.font}
+            </p>
+          </div>
+          <button
+            onClick={() => onAbrirStudio?.()}
+            data-testid="boton-abrir-studio"
+            className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-all active:scale-95 shrink-0"
+          >
+            🎨 Personalizar
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-500 mt-3">
+          También lo abrís con el 🎨 del header (y el ↺ del studio vuelve al tema Emerald Deep).
+        </p>
+      </section>
+
       {/* ── Roadmap ────────────────────────────────────────────── */}
       <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5">
         <h3 className="font-bold text-slate-200 text-base mb-1 flex items-center gap-2">
@@ -334,10 +371,12 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               Estadísticas con gráficas, gastos fijos (suscripciones) con botón Pagar, calendario de pagos, retos financieros, lista de compras con biblioteca de productos y export Excel/PDF.
             </p>
           </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-xs font-black text-fuchsia-400">F4 · 🤖 Robots · IA</p>
+          <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3">
+            <p className="text-xs font-black text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5" /> F4 · 🤖 WalletBot + Theme Studio ✓ (instalada)
+            </p>
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              WalletBot junto a tus otros robots: análisis del mes, consejos de gasto y respuestas con tus datos reales.
+              WalletBot 2.0: análisis priorizado del mes y preguntas rápidas con tus datos reales (offline). Theme Studio: 9 temas, luminosidad, estilos, fondos animados y tipografía — el roadmap quedó COMPLETO.
             </p>
           </div>
         </div>

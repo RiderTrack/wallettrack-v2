@@ -7,7 +7,8 @@
 // F1: al pie, tu cuenta Google (o modo local) con cerrar sesión.
 // F2 instaló Sobres, Deudas, Presupuestos y Metas (sin candado).
 // F3 instaló Compras, Suscripciones, Calendario, Retos y
-// Estadísticas (sin candado). Solo queda F4 (WalletBot) 🔒.
+// Estadísticas (sin candado). F4 instaló WalletBot: el roadmap
+// quedó COMPLETO — no queda ningún candado en el menú.
 // Se abre con el ☰ del header, se cierra con backdrop, X o ESC.
 // ═══════════════════════════════════════════════════════════
 
@@ -75,7 +76,7 @@ const GRUPOS: GrupoNav[] = [
     titulo: '🤖 ROBOTS · IA',
     acento: 'text-fuchsia-400',
     items: [
-      { vista: 'walletbot', nombre: 'WalletBot · Robot de Finanzas', icono: <Bot className="w-4 h-4" />, fase: 'F4' },
+      { vista: 'walletbot', nombre: 'WalletBot 2.0 · Finanzas', icono: <Bot className="w-4 h-4" /> },
     ],
   },
   {

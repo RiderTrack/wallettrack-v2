@@ -10,15 +10,18 @@
 //     con sesión, TODO se respalda en wallettrack_sync/{uid}
 //     (baja+combina+sube al entrar, cada 5 min, al volver al
 //     frente y 8 s tras cada cambio — debounce).
-//   • F2 DINERO + F3 ANÁLISIS instaladas; queda F4 WalletBot.
+//   • F2 DINERO + F3 ANÁLISIS + F4 WALLETBOT instaladas: con
+//     esto el roadmap está COMPLETO — el bot analiza tu mes y
+//     responde preguntas con tus datos reales (offline), y el
+//     Theme Studio (🎨 en el header) re-pinta toda la app.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import {
-  LayoutDashboard, Wallet, History, Settings, Menu,
+  LayoutDashboard, Wallet, History, Settings, Menu, Palette,
 } from 'lucide-react';
-import type { EstadoWallet, VistaApp } from './types';
+import type { EstadoWallet, TemaWallet, VistaApp } from './types';
 import { nombrePlataforma, versionApp } from './services/platform';
 import {
   leerEstado, persistir, agregarTransaccion, eliminarTransaccion,
@@ -30,7 +33,6 @@ import { initSync } from './services/sync';
 import { useAuth, esModoLocal, marcarModoLocal } from './hooks/useAuth';
 import { soles } from './services/dinero';
 import { NavDrawer } from './components/NavDrawer';
-import { VistaBloqueada } from './components/VistaBloqueada';
 import { DashboardView } from './components/DashboardView';
 import { CuentasView } from './components/CuentasView';
 import { SobresView } from './components/SobresView';
@@ -46,17 +48,14 @@ import { SuscripcionesView } from './components/SuscripcionesView';
 import { CalendarioView } from './components/CalendarioView';
 import { RetosView } from './components/RetosView';
 import { EstadisticasView } from './components/EstadisticasView';
+import { WalletBotView } from './components/WalletBotView';
+import { ThemeStudioModal } from './components/ThemeStudioModal';
+import { FondoCanvas } from './components/FondoCanvas';
+import { leerTema } from './services/tema';
 
-// Vistas bloqueadas hasta su fase (F2 fue DINERO y F3 fue
-// ANÁLISIS: compras, suscripciones, calendario, retos y
-// estadísticas ya están INSTALADAS — solo queda F4)
-const VISTAS_FUTURAS: Partial<Record<VistaApp, { fase: string; nombre: string; descripcion: string; novedades: string[] }>> = {
-  walletbot: {
-    fase: 'F4', nombre: 'WalletBot · Robot de Finanzas',
-    descripcion: 'El robot IA del WalletTrack junto a tus otros robots: analiza tu mes y aconseja con tus datos reales.',
-    novedades: ['Análisis automático del mes', 'Consejos anti-gasto hormiga', 'Chat con contexto de tus finanzas'],
-  },
-};
+// F4 instaló WalletBot: TODAS las vistas del roadmap están
+// activas — no queda ninguna bloqueada.
+const VISTAS_FUTURAS: Partial<Record<VistaApp, { fase: string; nombre: string; descripcion: string; novedades: string[] }>> = {};
 
 // Nav inferior: los 4 destinos diarios (el resto vive en ☰)
 const NAV: { vista: VistaApp; nombre: string; icono: React.ReactNode }[] = [
@@ -72,7 +71,7 @@ const TITULOS: Partial<Record<VistaApp, string>> = {
   presupuestos: 'Presupuestos', metas: 'Metas de Ahorro',
   compras: 'Lista de Compras', suscripciones: 'Gastos Fijos',
   calendario: 'Calendario de Pagos', retos: 'Retos Financieros',
-  estadisticas: 'Estadísticas',
+  estadisticas: 'Estadísticas', walletbot: 'WalletBot 2.0',
   historial: 'Historial', config: 'Configuración',
 };
 
@@ -83,6 +82,11 @@ export default function App() {
   const [estado, setEstado] = useState<EstadoWallet>(() => leerEstado());
   const [drawerAbierto, setDrawerAbierto] = useState(false);
   const [toast, setToast] = useState('');
+
+  // F4 · Theme Studio: tema vivo (para el canvas de fondo) +
+  // apertura del modal desde el 🎨 del header o Ajustes.
+  const [tema, setTemaApp] = useState<TemaWallet>(() => leerTema());
+  const [studioAbierto, setStudioAbierto] = useState(false);
 
   // Modal de transacción
   const [modalTipo, setModalTipo] = useState<'income' | 'expense'>('expense');
@@ -179,7 +183,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F3</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F4</p>
       </div>
     );
   }
@@ -198,7 +202,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 custom-scrollbar">
+    <div className="min-h-screen bg-slate-950 custom-scrollbar wt-root">
+      {/* F4 · Fondo animado del Theme Studio (canvas detrás del contenido) */}
+      <FondoCanvas tipo={tema.background} accent={tema.accent} />
+
       {/* ☰ Menú hamburguesa — TODAS las opciones agrupadas */}
       <NavDrawer
         abierto={drawerAbierto}
@@ -234,8 +241,16 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F3 · ANÁLISIS
+            F4 · WALLETBOT
           </span>
+          <button
+            onClick={() => setStudioAbierto(true)}
+            data-testid="boton-theme-studio"
+            title="Theme Studio"
+            className="w-9 h-9 rounded-xl border border-slate-600 text-slate-300 hover:text-white hover:border-emerald-500/60 hover:bg-emerald-500/10 flex items-center justify-center transition-all shrink-0"
+          >
+            <Palette className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setVista('config')}
             data-testid="boton-ajustes"
@@ -311,6 +326,11 @@ export default function App() {
           <EstadisticasView estado={estado} onToast={mostrarToast} />
         )}
 
+        {/* F4 · WALLETBOT: el robot de finanzas con tus datos reales */}
+        {vista === 'walletbot' && (
+          <WalletBotView estado={estado} onToast={mostrarToast} />
+        )}
+
         {vista === 'historial' && (
           <HistorialView
             estado={estado}
@@ -326,20 +346,12 @@ export default function App() {
             modoLocal={modoLocal}
             onImportar={importar}
             onIniciarSesion={() => { marcarModoLocal(false); setModoLocal(false); }}
+            onAbrirStudio={() => setStudioAbierto(true)}
             onToast={mostrarToast}
           />
         )}
 
-        {/* Vistas F4+: candado + qué traerán */}
-        {infoFutura && (
-          <VistaBloqueada
-            nombre={infoFutura.nombre}
-            fase={infoFutura.fase}
-            descripcion={infoFutura.descripcion}
-            novedades={infoFutura.novedades}
-            onVolver={() => setVista('dashboard')}
-          />
-        )}
+        {/* (F4 completó el roadmap: ya no hay vistas bloqueadas) */}
       </main>
 
       {/* Barra inferior (4 destinos diarios) */}
@@ -372,6 +384,13 @@ export default function App() {
         sugerida={sugerida}
         onCerrar={() => setModalAbierto(false)}
         onGuardar={guardarTransaccion}
+      />
+
+      {/* F4 · Theme Studio (🎨 del header o botón de Ajustes) */}
+      <ThemeStudioModal
+        abierto={studioAbierto}
+        onCerrar={() => setStudioAbierto(false)}
+        onCambio={(t) => setTemaApp(t)}
       />
 
       {/* Toast */}

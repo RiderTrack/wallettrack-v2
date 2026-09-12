@@ -17,7 +17,7 @@ un backup hecho en la app vieja importa sin conversión.
 | F1 | ✅ | Acceso: login con Google (Firebase), modo local 100 % offline, respaldo en la nube wallettrack_sync/{uid} con merge sin borrar |
 | F2 | ✅ | El método completo: Sobres de dinero (recargar/gastar/historial), Deudas y apartados (cuotas + apartar semanal), Presupuestos por categoría con alertas 80 %/100 %, Metas de ahorro con aportes |
 | F3 | ✅ | Análisis y control: Estadísticas con gráficas SVG (evolución + ahorro %), Gastos Fijos con botón Pagar (+1 mes), Calendario de pagos mensual, Retos financieros, Lista de compras con biblioteca de productos e historial, Export Excel (5 hojas) y PDF |
-| F4 | 🔒 | 🤖 WalletBot — robot IA de finanzas con tus datos reales |
+| F4 | ✅ | 🤖 WalletBot 2.0 (análisis priorizado del mes + preguntas rápidas offline con tus datos reales) + 🎨 Theme Studio (9 temas, 5 luminosidades, 5 estilos, fondos animados, tipografía, compacto) — ROADMAP COMPLETO |
 
 ## 🏗️ Desarrollo local
 
@@ -49,15 +49,20 @@ src/
     HistorialView.tsx    # Tabla con filtros + export CSV
     ConfiguracionView.tsx# Respaldo JSON v3.0 + roadmap
     ModalTransaccion.tsx # Form de ingreso/gasto
-    VistaBloqueada.tsx   # Placeholder de F4
+    VistaBloqueada.tsx   # (roadmap completo — sin uso desde F4)
   services/
     estado.ts            # 19 claves wallettrack_* + respaldo v3.0
     dinero.ts            # Formato S/ es-PE + fechas
     archivo.ts           # Export/compartir (APK y web)
     exportar.ts          # F3: Excel (5 hojas) + PDF con import dinámico
+    walletbot.ts         # F4: motor del bot (analyzeWallet 1:1 + preguntas)
+    tema.ts               # F4: motor del Theme Studio (vars CSS de Tailwind)
     platform.ts          # Entorno + versión
   data/catalogos.ts     # Cuentas y categorías del original
 ```
+
+> F4 añade: WalletBotView · ThemeStudioModal · FondoCanvas. El tema NO va a
+> la nube (clave wallettrack_theme del viejo, por aparato).
 
 > F3 añade: SobresView · DeudasView · PresupuestosView · MetasView (F2) y
 > ComprasView · SuscripcionesView · CalendarioView · RetosView ·

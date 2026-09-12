@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F3 · Análisis y Control';
+  return 'F4 · WalletBot + Theme Studio';
 }
