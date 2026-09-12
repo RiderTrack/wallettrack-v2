@@ -5,7 +5,8 @@
 //   Inicio · Dinero · Planificar · Análisis · 🤖 Robots · IA ·
 //   Ajustes
 // F1: al pie, tu cuenta Google (o modo local) con cerrar sesión.
-// Las vistas que llegan en F2+ muestran candado 🔒 con la fase.
+// F2 instaló Sobres, Deudas, Presupuestos y Metas (sin candado).
+// Las vistas que llegan en F3+ muestran candado 🔒 con la fase.
 // Se abre con el ☰ del header, se cierra con backdrop, X o ESC.
 // ═══════════════════════════════════════════════════════════
 
@@ -45,8 +46,8 @@ const GRUPOS: GrupoNav[] = [
     acento: 'text-emerald-400',
     items: [
       { vista: 'cuentas',    nombre: 'Mis Cuentas',        icono: <Wallet className="w-4 h-4" /> },
-      { vista: 'sobres',     nombre: 'Sobres de Dinero',   icono: <Layers className="w-4 h-4" />, fase: 'F2' },
-      { vista: 'deudas',     nombre: 'Deudas y Apartados', icono: <HandCoins className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'sobres',     nombre: 'Sobres de Dinero',   icono: <Layers className="w-4 h-4" /> },
+      { vista: 'deudas',     nombre: 'Deudas y Apartados', icono: <HandCoins className="w-4 h-4" /> },
       { vista: 'compras',    nombre: 'Lista de Compras',   icono: <ShoppingCart className="w-4 h-4" />, fase: 'F3' },
     ],
   },
@@ -54,8 +55,8 @@ const GRUPOS: GrupoNav[] = [
     titulo: 'PLANIFICAR',
     acento: 'text-cyan-400',
     items: [
-      { vista: 'presupuestos',   nombre: 'Presupuestos',        icono: <PiggyBank className="w-4 h-4" />, fase: 'F2' },
-      { vista: 'metas',          nombre: 'Metas de Ahorro',     icono: <Target className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'presupuestos',   nombre: 'Presupuestos',        icono: <PiggyBank className="w-4 h-4" /> },
+      { vista: 'metas',          nombre: 'Metas de Ahorro',     icono: <Target className="w-4 h-4" /> },
       { vista: 'suscripciones',  nombre: 'Suscripciones',       icono: <Repeat className="w-4 h-4" />, fase: 'F3' },
       { vista: 'calendario',     nombre: 'Calendario de Pagos', icono: <CalendarDays className="w-4 h-4" />, fase: 'F3' },
       { vista: 'retos',          nombre: 'Retos Financieros',   icono: <Trophy className="w-4 h-4" />, fase: 'F3' },

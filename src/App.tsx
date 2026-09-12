@@ -33,34 +33,18 @@ import { NavDrawer } from './components/NavDrawer';
 import { VistaBloqueada } from './components/VistaBloqueada';
 import { DashboardView } from './components/DashboardView';
 import { CuentasView } from './components/CuentasView';
+import { SobresView } from './components/SobresView';
+import { DeudasView } from './components/DeudasView';
+import { PresupuestosView } from './components/PresupuestosView';
+import { MetasView } from './components/MetasView';
 import { HistorialView } from './components/HistorialView';
 import { ConfiguracionView } from './components/ConfiguracionView';
 import { ModalTransaccion } from './components/ModalTransaccion';
 import { LoginScreen } from './components/LoginScreen';
 
-// Vistas bloqueadas hasta su fase (F1 fue ACCESO: login Google +
-// nube; los módulos de dinero corren una fase — mismo ritmo FitTrack)
+// Vistas bloqueadas hasta su fase (F1 fue ACCESO y F2 fue DINERO:
+// sobres, deudas, presupuestos y metas ya están INSTALADAS)
 const VISTAS_FUTURAS: Partial<Record<VistaApp, { fase: string; nombre: string; descripcion: string; novedades: string[] }>> = {
-  sobres: {
-    fase: 'F2', nombre: 'Sobres de Dinero',
-    descripcion: 'El método de sobres del WalletTrack original, con recargar, gastar e historial por sobre.',
-    novedades: ['Sobres con emoji, color y saldo propio', 'Recargar y gastar desde cada sobre', 'Historial de movimientos por sobre'],
-  },
-  deudas: {
-    fase: 'F2', nombre: 'Deudas y Apartados',
-    descripcion: 'Deudas con abonos, historial de pagos y dinero apartado (apartar / pagar / ver de qué cuenta sale).',
-    novedades: ['Registrar deudas con monto y abonos', 'Pestañas pagar / historial / apartar', 'Alertas de deuda pendiente'],
-  },
-  presupuestos: {
-    fase: 'F2', nombre: 'Presupuestos',
-    descripcion: 'Límite por categoría con barra de avance y alertas cuando te acercás al tope.',
-    novedades: ['Presupuestos por categoría con color', 'Barra de avance del mes en curso', 'Alertas al 80% y 100% del límite'],
-  },
-  metas: {
-    fase: 'F2', nombre: 'Metas de Ahorro',
-    descripcion: 'Metas con monto objetivo, aportes y progreso — con abonos que quedan en el historial.',
-    novedades: ['Metas con objetivo y fecha', 'Botón de aporte rápido', 'Progreso y restante en vivo'],
-  },
   compras: {
     fase: 'F3', nombre: 'Lista de Compras',
     descripcion: 'Lista de compras con biblioteca de productos, precios y comparación en tienda.',
@@ -102,7 +86,10 @@ const NAV: { vista: VistaApp; nombre: string; icono: React.ReactNode }[] = [
 ];
 
 const TITULOS: Partial<Record<VistaApp, string>> = {
-  dashboard: 'Dashboard', cuentas: 'Mis Cuentas', historial: 'Historial', config: 'Configuración',
+  dashboard: 'Dashboard', cuentas: 'Mis Cuentas',
+  sobres: 'Sobres de Dinero', deudas: 'Deudas y Apartados',
+  presupuestos: 'Presupuestos', metas: 'Metas de Ahorro',
+  historial: 'Historial', config: 'Configuración',
 };
 
 export default function App() {
@@ -208,7 +195,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F1</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F2</p>
       </div>
     );
   }
@@ -263,7 +250,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F1 · ACCESO
+            F2 · DINERO
           </span>
           <button
             onClick={() => setVista('config')}
@@ -302,6 +289,23 @@ export default function App() {
           />
         )}
 
+        {/* F2 · DINERO: sobres, deudas, presupuestos y metas */}
+        {vista === 'sobres' && (
+          <SobresView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
+        )}
+
+        {vista === 'deudas' && (
+          <DeudasView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
+        )}
+
+        {vista === 'presupuestos' && (
+          <PresupuestosView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
+        )}
+
+        {vista === 'metas' && (
+          <MetasView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
+        )}
+
         {vista === 'historial' && (
           <HistorialView
             estado={estado}
@@ -321,7 +325,7 @@ export default function App() {
           />
         )}
 
-        {/* Vistas F2+: candado + qué traerán */}
+        {/* Vistas F3+: candado + qué traerán */}
         {infoFutura && (
           <VistaBloqueada
             nombre={infoFutura.nombre}

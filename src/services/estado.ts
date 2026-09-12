@@ -6,8 +6,11 @@
 // viejo WalletTrack importa sin conversión (y viceversa).
 // ═══════════════════════════════════════════════════════════
 
-import type { EstadoWallet, GastoRapido, RespaldoWallet, Transaccion } from '../types';
-import { CUENTAS_CATALOG, GASTOS_RAPIDOS_DEFAULT } from '../data/catalogos';
+import type {
+  Deuda, DeudaMov, EstadoWallet, GastoRapido, Meta, Presupuesto,
+  RespaldoWallet, Sobre, SobreMov, Transaccion,
+} from '../types';
+import { CUENTAS_CATALOG, CATS_GASTO_DEFAULT, GASTOS_RAPIDOS_DEFAULT } from '../data/catalogos';
 import { hoyISO, mesActualISO, esDelMes } from './dinero';
 
 // ── Claves del viejo (NO cambiar: compatibilidad de datos) ────
@@ -164,6 +167,19 @@ function idUnico(existentes: { id: string }[]): string {
   return `${base}-${n}`;
 }
 
+/**
+ * Id con prefijo (sobre_/deuda_) y ANTI-COLISIÓN: compara contra
+ * los ids CON prefijo reales de la lista (idUnico pelado no
+ * detectaría colisiones contra ids prefijados del mismo ms).
+ */
+function idConPrefijo(prefijo: string, existentes: { id: string }[]): string {
+  const base = `${prefijo}_${Date.now()}`;
+  if (!existentes.some((t) => t.id === base)) return base;
+  let n = 1;
+  while (existentes.some((t) => t.id === `${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
 export function agregarTransaccion(estado: EstadoWallet, datos: DatosTransaccion): EstadoWallet {
   const nueva: Transaccion = {
     id: idUnico(estado.transactions),
@@ -218,6 +234,394 @@ export function hacerTransferencia(
     { id: idEntrada, date: hoy, type: 'income',  category: 'Transferencia', amount: monto, description: `Transferencia ← ${fromNombre}`, account: to },
   ];
   return { estado: { ...estado, transactions: [...par, ...estado.transactions] }, ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════
+// ✉️ F2 · SOBRES — método de sobres del viejo, formas exactas
+// (wallettrack_sobres + wallettrack_sobre_movs)
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosSobre {
+  nombre: string;
+  emoji: string;
+  monto: number;
+  color: string;
+  /** 'balance' descuenta del saldo (gasto especial) · 'manual' solo suma al sobre */
+  origen: 'balance' | 'manual';
+}
+
+export function movimientosDeSobre(estado: EstadoWallet, sobreId: string): SobreMov[] {
+  return estado.sobreMovs.filter((m) => m.sobreId === sobreId);
+}
+
+export function sobreGastado(estado: EstadoWallet, sobreId: string): number {
+  return estado.sobreMovs
+    .filter((m) => m.sobreId === sobreId && m.tipo === 'gasto')
+    .reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
+}
+
+function sobreRecargas(estado: EstadoWallet, sobreId: string): number {
+  return estado.sobreMovs
+    .filter((m) => m.sobreId === sobreId && m.tipo === 'recarga')
+    .reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
+}
+
+/** montoInicial + recargas (todo lo que pasó por el sobre) */
+export function sobreTotalCargado(estado: EstadoWallet, sobreId: string): number {
+  const sobre = estado.sobres.find((s) => s.id === sobreId);
+  if (!sobre) return 0;
+  return (Number(sobre.montoInicial) || 0) + sobreRecargas(estado, sobreId);
+}
+
+/** Lo que queda disponible para gastar */
+export function sobreDisponible(estado: EstadoWallet, sobreId: string): number {
+  const sobre = estado.sobres.find((s) => s.id === sobreId);
+  if (!sobre) return 0;
+  return (Number(sobre.montoInicial) || 0) + sobreRecargas(estado, sobreId) - sobreGastado(estado, sobreId);
+}
+
+/** Transacción especial del viejo: aparta dinero del balance a un sobre */
+function transaccionSobre(nombre: string, monto: number, esRecarga: boolean): Transaccion {
+  return {
+    id: '', // el llamador asigna el id único
+    date: hoyISO(),
+    type: 'expense',
+    category: `✉️ Sobre: ${nombre}`,
+    amount: monto,
+    description: esRecarga ? `✉️ Recarga al sobre "${nombre}"` : `✉️ Apartado al sobre "${nombre}"`,
+    account: 'efectivo',
+    esSobre: true,
+  };
+}
+
+export function crearSobre(estado: EstadoWallet, datos: DatosSobre): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.nombre.trim()) return { estado, ok: false, error: 'Ingresa un nombre para el sobre' };
+  if (!(datos.monto > 0)) return { estado, ok: false, error: 'Ingresa un monto válido' };
+  let nuevo: EstadoWallet = estado;
+  if (datos.origen === 'balance') {
+    if (datos.monto > saldoTotal(estado) + 0.01) {
+      return { estado, ok: false, error: `Saldo insuficiente. Tienes S/ ${saldoTotal(estado).toFixed(2)}` };
+    }
+    const t = transaccionSobre(datos.nombre, datos.monto, false);
+    t.id = idUnico(nuevo.transactions);
+    nuevo = { ...nuevo, transactions: [t, ...nuevo.transactions] };
+  }
+  const sobre: Sobre = {
+    id: idConPrefijo('sobre', nuevo.sobres),
+    nombre: datos.nombre.trim(),
+    emoji: datos.emoji || '✉️',
+    montoInicial: datos.monto,
+    color: datos.color || '#f59e0b',
+    fechaCreacion: hoyISO(),
+  };
+  return { estado: { ...nuevo, sobres: [...nuevo.sobres, sobre] }, ok: true };
+}
+
+export function recargarSobre(
+  estado: EstadoWallet, sobreId: string, monto: number, origen: 'balance' | 'manual',
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  const sobre = estado.sobres.find((s) => s.id === sobreId);
+  if (!sobre) return { estado, ok: false, error: 'Sobre no encontrado' };
+  if (!(monto > 0)) return { estado, ok: false, error: 'Ingresa un monto' };
+  let nuevo: EstadoWallet = estado;
+  if (origen === 'balance') {
+    if (monto > saldoTotal(estado) + 0.01) {
+      return { estado, ok: false, error: `Saldo insuficiente. Tienes S/ ${saldoTotal(estado).toFixed(2)}` };
+    }
+    const t = transaccionSobre(sobre.nombre, monto, true);
+    t.id = idUnico(nuevo.transactions);
+    nuevo = { ...nuevo, transactions: [t, ...nuevo.transactions] };
+  }
+  const mov: SobreMov = {
+    id: idUnico(nuevo.sobreMovs),
+    sobreId,
+    tipo: 'recarga',
+    monto,
+    desc: origen === 'balance' ? 'Recarga desde saldo' : 'Recarga manual',
+    fecha: hoyISO(),
+  };
+  return { estado: { ...nuevo, sobreMovs: [mov, ...nuevo.sobreMovs] }, ok: true };
+}
+
+export function gastarDesdeSobre(
+  estado: EstadoWallet, sobreId: string, monto: number, desc: string,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  const sobre = estado.sobres.find((s) => s.id === sobreId);
+  if (!sobre) return { estado, ok: false, error: 'Sobre no encontrado' };
+  if (!(monto > 0)) return { estado, ok: false, error: 'Ingresa un monto' };
+  const disponible = sobreDisponible(estado, sobreId);
+  if (monto > disponible + 0.01) {
+    return { estado, ok: false, error: `El sobre solo tiene S/ ${disponible.toFixed(2)}` };
+  }
+  const mov: SobreMov = {
+    id: idUnico(estado.sobreMovs),
+    sobreId,
+    tipo: 'gasto',
+    monto,
+    desc: desc.trim() || 'Gasto del sobre',
+    fecha: hoyISO(),
+  };
+  return { estado: { ...estado, sobreMovs: [mov, ...estado.sobreMovs] }, ok: true };
+}
+
+export function eliminarSobre(estado: EstadoWallet, sobreId: string): EstadoWallet {
+  return {
+    ...estado,
+    sobres: estado.sobres.filter((s) => s.id !== sobreId),
+    sobreMovs: estado.sobreMovs.filter((m) => m.sobreId !== sobreId),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 💳 F2 · DEUDAS — cuotas + apartados, formas exactas del viejo
+// (wallettrack_deudas + wallettrack_deuda_movs)
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosDeuda {
+  nombre: string;
+  montoTotal: number;
+  totalCuotas: number;
+  montoCuota: number;   // ≤ 0 → total / cuotas (como el viejo)
+  cuotasPagadas: number;
+  proximaFecha: string;
+  cuenta: string;
+}
+
+export function movimientosDeDeuda(estado: EstadoWallet, deudaId: string): DeudaMov[] {
+  return estado.deudaMovs.filter((m) => m.deudaId === deudaId);
+}
+
+/** Aportes juntados para la cuota ACTUAL (se resetea al pagar cada cuota) */
+export function juntadoActual(estado: EstadoWallet, deudaId: string): number {
+  const d = estado.deudas.find((x) => x.id === deudaId);
+  if (!d) return 0;
+  return estado.deudaMovs
+    .filter((m) => m.deudaId === deudaId && m.tipo === 'aportar' && m.cuotaNum === d.cuotaActual)
+    .reduce((a, m) => a + (Number(m.monto) || 0), 0);
+}
+
+/** (totalCuotas − cuotasPagadas) × montoCuota */
+export function montoPendienteDeuda(estado: EstadoWallet, deudaId: string): number {
+  const d = estado.deudas.find((x) => x.id === deudaId);
+  if (!d) return 0;
+  return (d.totalCuotas - d.cuotasPagadas) * (Number(d.montoCuota) || 0);
+}
+
+export function crearDeuda(estado: EstadoWallet, datos: DatosDeuda): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.nombre.trim()) return { estado, ok: false, error: 'Ingresa el nombre de la deuda' };
+  if (!(datos.montoTotal > 0)) return { estado, ok: false, error: 'Ingresa el monto total' };
+  if (!(datos.totalCuotas > 0)) return { estado, ok: false, error: 'Ingresa el número de cuotas' };
+  if (!datos.proximaFecha) return { estado, ok: false, error: 'Ingresa la fecha de la próxima cuota' };
+  const montoCuota = !(datos.montoCuota > 0) ? datos.montoTotal / datos.totalCuotas : datos.montoCuota;
+  const deuda: Deuda = {
+    id: idConPrefijo('deuda', estado.deudas),
+    nombre: datos.nombre.trim(),
+    montoTotal: datos.montoTotal,
+    totalCuotas: Math.round(datos.totalCuotas),
+    montoCuota,
+    semanalSugerido: montoCuota / 4,
+    cuotasPagadas: Math.max(0, Math.round(datos.cuotasPagadas || 0)),
+    cuotaActual: Math.max(0, Math.round(datos.cuotasPagadas || 0)) + 1,
+    proximaFecha: datos.proximaFecha,
+    cuenta: datos.cuenta || 'efectivo',
+    fechaCreacion: hoyISO(),
+  };
+  return { estado: { ...estado, deudas: [...estado.deudas, deuda] }, ok: true };
+}
+
+/** Apartar SIN tocar el balance: solo junta dinero para la cuota (como el viejo) */
+export function apartarParaDeuda(
+  estado: EstadoWallet, deudaId: string, monto: number,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  const d = estado.deudas.find((x) => x.id === deudaId);
+  if (!d) return { estado, ok: false, error: 'Deuda no encontrada' };
+  if (!(monto > 0)) return { estado, ok: false, error: 'Ingresa un monto' };
+  const mov: DeudaMov = {
+    id: idUnico(estado.deudaMovs),
+    deudaId,
+    tipo: 'aportar',
+    cuotaNum: d.cuotaActual,
+    monto,
+    fecha: hoyISO(),
+    desc: `🪙 Aporte semanal cuota ${d.cuotaActual}`,
+  };
+  return { estado: { ...estado, deudaMovs: [mov, ...estado.deudaMovs] }, ok: true };
+}
+
+/** Próximo mes, mismo día (regla del viejo) */
+function mesSiguiente(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setMonth(d.getMonth() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Paga la cuota: gasto REAL de la cuenta + avanza cuotas (como el viejo) */
+export function pagarCuotaDeuda(
+  estado: EstadoWallet, deudaId: string, monto: number,
+): { estado: EstadoWallet; ok: boolean; error?: string; terminada?: boolean } {
+  const d = estado.deudas.find((x) => x.id === deudaId);
+  if (!d) return { estado, ok: false, error: 'Deuda no encontrada' };
+  if (!(monto > 0)) return { estado, ok: false, error: 'Ingresa el monto' };
+  if (d.cuotasPagadas >= d.totalCuotas) return { estado, ok: false, error: '¡Deuda completamente pagada!' };
+  const hoy = hoyISO();
+  const t: Transaccion = {
+    id: idUnico(estado.transactions),
+    date: hoy,
+    type: 'expense',
+    category: '💳 Cuota deuda',
+    amount: monto,
+    description: `💳 Cuota ${d.cuotaActual}/${d.totalCuotas} — ${d.nombre}`,
+    account: d.cuenta,
+  };
+  const mov: DeudaMov = {
+    id: idUnico([{ id: t.id }, ...estado.deudaMovs]),
+    deudaId,
+    tipo: 'pagar',
+    cuotaNum: d.cuotaActual,
+    monto,
+    fecha: hoy,
+    desc: `💳 Cuota ${d.cuotaActual} pagada`,
+  };
+  const avanzada: Deuda = {
+    ...d,
+    cuotasPagadas: d.cuotasPagadas + 1,
+    cuotaActual: d.cuotaActual + 1,
+    proximaFecha: mesSiguiente(d.proximaFecha),
+  };
+  return {
+    estado: {
+      ...estado,
+      transactions: [t, ...estado.transactions],
+      deudaMovs: [mov, ...estado.deudaMovs],
+      deudas: estado.deudas.map((x) => (x.id === deudaId ? avanzada : x)),
+    },
+    ok: true,
+    terminada: avanzada.cuotasPagadas >= avanzada.totalCuotas,
+  };
+}
+
+export function eliminarDeuda(estado: EstadoWallet, deudaId: string): EstadoWallet {
+  return {
+    ...estado,
+    deudas: estado.deudas.filter((x) => x.id !== deudaId),
+    deudaMovs: estado.deudaMovs.filter((m) => m.deudaId !== deudaId),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🐷 F2 · PRESUPUESTOS — límite por categoría del mes actual
+// (wallettrack_budgets)
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosPresupuesto {
+  categoria: string;
+  limit: number;
+  color: string;
+}
+
+/** Gastos del mes por categoría (expense + mes en curso) */
+export function gastosDelMesPorCategoria(
+  estado: EstadoWallet, mesISO = mesActualISO(),
+): Record<string, number> {
+  const gastos: Record<string, number> = {};
+  for (const t of estado.transactions) {
+    if (t.type !== 'expense') continue;
+    if (!esDelMes(t.date, mesISO)) continue;
+    gastos[t.category] = (gastos[t.category] || 0) + (Number(t.amount) || 0);
+  }
+  return gastos;
+}
+
+/** Emoji de la categoría (defaults + personalizadas, fallback 📦) */
+function iconoCategoria(estado: EstadoWallet, nombre: string): string {
+  const cat = [...CATS_GASTO_DEFAULT, ...estado.categoriasGasto].find((c) => c.nombre === nombre);
+  return cat?.emoji ?? '📦';
+}
+
+/** Upsert: si la categoría ya tiene presupuesto, actualiza límite/color (como el viejo) */
+export function guardarPresupuesto(
+  estado: EstadoWallet, datos: DatosPresupuesto,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.categoria) return { estado, ok: false, error: 'Elige una categoría' };
+  if (!(datos.limit > 0)) return { estado, ok: false, error: 'Ingresa un límite válido' };
+  const existing = estado.budgets.find((b) => b.category === datos.categoria);
+  if (existing) {
+    return {
+      estado: {
+        ...estado,
+        budgets: estado.budgets.map((b) =>
+          b.category === datos.categoria ? { ...b, limit: datos.limit, color: datos.color } : b),
+      },
+      ok: true,
+    };
+  }
+  const nuevo: Presupuesto = {
+    id: idUnico(estado.budgets),
+    category: datos.categoria,
+    icon: iconoCategoria(estado, datos.categoria),
+    limit: datos.limit,
+    color: datos.color || '#10b981',
+  };
+  return { estado: { ...estado, budgets: [...estado.budgets, nuevo] }, ok: true };
+}
+
+export function eliminarPresupuesto(estado: EstadoWallet, id: string): EstadoWallet {
+  return { ...estado, budgets: estado.budgets.filter((b) => b.id !== id) };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🎯 F2 · METAS — objetivos con aportes (wallettrack_goals)
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosMeta {
+  name: string;
+  target: number;
+  current: number;
+  date: string;
+}
+
+export function crearMeta(estado: EstadoWallet, datos: DatosMeta): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.name.trim()) return { estado, ok: false, error: 'Ingresa el nombre de la meta' };
+  if (!(datos.target > 0)) return { estado, ok: false, error: 'Ingresa un objetivo válido' };
+  const meta: Meta = {
+    id: idUnico(estado.goals),
+    name: datos.name.trim(),
+    target: datos.target,
+    current: Math.max(0, Number(datos.current) || 0),
+    date: datos.date || '',
+  };
+  return { estado: { ...estado, goals: [...estado.goals, meta] }, ok: true };
+}
+
+/** Abona a la meta + registra el gasto 'Ahorro' SIN cuenta (forma exacta del viejo) */
+export function abonarMeta(
+  estado: EstadoWallet, id: string, extra: number,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  const meta = estado.goals.find((g) => g.id === id);
+  if (!meta) return { estado, ok: false, error: 'Meta no encontrada' };
+  if (!(extra > 0)) return { estado, ok: false, error: 'Ingresa un monto' };
+  const t: Transaccion = {
+    id: idUnico(estado.transactions),
+    date: hoyISO(),
+    type: 'expense',
+    category: 'Ahorro',
+    amount: extra,
+    description: `Aporte a: ${meta.name}`,
+    // sin account — exactamente como el viejo (no descuenta de ninguna cuenta)
+  };
+  return {
+    estado: {
+      ...estado,
+      goals: estado.goals.map((g) =>
+        g.id === id ? { ...g, current: Math.min(g.target, g.current + extra) } : g),
+      transactions: [t, ...estado.transactions],
+    },
+    ok: true,
+  };
+}
+
+export function eliminarMeta(estado: EstadoWallet, id: string): EstadoWallet {
+  return { ...estado, goals: estado.goals.filter((g) => g.id !== id) };
 }
 
 // ── Saldos ────────────────────────────────────────────────────

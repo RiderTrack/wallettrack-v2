@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F1 · Acceso';
+  return 'F2 · Dinero';
 }

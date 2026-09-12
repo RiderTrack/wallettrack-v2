@@ -318,10 +318,12 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               Login con Google + respaldo automático en wallettrack_sync y modo local.
             </p>
           </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-xs font-black text-cyan-400">F2 · El método completo</p>
+          <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3">
+            <p className="text-xs font-black text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5" /> F2 · El método completo ✓ (instalada)
+            </p>
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              Sobres de dinero, deudas y apartados, presupuestos con barras y metas de ahorro con aportes.
+              Sobres de dinero, deudas y apartados, presupuestos con barras y alertas, metas de ahorro con aportes — con nube desde el día 1.
             </p>
           </div>
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">

@@ -14,9 +14,10 @@ un backup hecho en la app vieja importa sin conversión.
 | Fase | Estado | Contenido |
 |------|--------|-----------|
 | F0 | ✅ | Base modular: Dashboard (patrimonio, flujo del mes, gastos rápidos, cuentas, últimos movimientos), Cuentas (saldos iniciales, transferencias, tarjetas), Historial (filtros + CSV + eliminar), Configuración (respaldo JSON v3.0), ☰ menú hamburguesa, barra inferior de 4 destinos, CI con APK firmado |
-| F1 | 🔒 | Sobres de dinero, Deudas y apartados, Presupuestos, Metas de ahorro |
-| F2 | 🔒 | Estadísticas con gráficas, Suscripciones, Calendario de pagos, Retos, Lista de compras, Export Excel/PDF |
-| F3 | 🔒 | 🤖 WalletBot — robot IA de finanzas con tus datos reales |
+| F1 | ✅ | Acceso: login con Google (Firebase), modo local 100 % offline, respaldo en la nube wallettrack_sync/{uid} con merge sin borrar |
+| F2 | ✅ | El método completo: Sobres de dinero (recargar/gastar/historial), Deudas y apartados (cuotas + apartar semanal), Presupuestos por categoría con alertas 80 %/100 %, Metas de ahorro con aportes |
+| F3 | 🔒 | Estadísticas con gráficas, Suscripciones, Calendario de pagos, Retos, Lista de compras, Export Excel/PDF |
+| F4 | 🔒 | 🤖 WalletBot — robot IA de finanzas con tus datos reales |
 
 ## 🏗️ Desarrollo local
 
