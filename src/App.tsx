@@ -10,7 +10,7 @@
 //     con sesión, TODO se respalda en wallettrack_sync/{uid}
 //     (baja+combina+sube al entrar, cada 5 min, al volver al
 //     frente y 8 s tras cada cambio — debounce).
-//   • El resto de módulos llega en F2+ (VistaBloqueada con candado)
+//   • F2 DINERO + F3 ANÁLISIS instaladas; queda F4 WalletBot.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -41,35 +41,16 @@ import { HistorialView } from './components/HistorialView';
 import { ConfiguracionView } from './components/ConfiguracionView';
 import { ModalTransaccion } from './components/ModalTransaccion';
 import { LoginScreen } from './components/LoginScreen';
+import { ComprasView } from './components/ComprasView';
+import { SuscripcionesView } from './components/SuscripcionesView';
+import { CalendarioView } from './components/CalendarioView';
+import { RetosView } from './components/RetosView';
+import { EstadisticasView } from './components/EstadisticasView';
 
-// Vistas bloqueadas hasta su fase (F1 fue ACCESO y F2 fue DINERO:
-// sobres, deudas, presupuestos y metas ya están INSTALADAS)
+// Vistas bloqueadas hasta su fase (F2 fue DINERO y F3 fue
+// ANÁLISIS: compras, suscripciones, calendario, retos y
+// estadísticas ya están INSTALADAS — solo queda F4)
 const VISTAS_FUTURAS: Partial<Record<VistaApp, { fase: string; nombre: string; descripcion: string; novedades: string[] }>> = {
-  compras: {
-    fase: 'F3', nombre: 'Lista de Compras',
-    descripcion: 'Lista de compras con biblioteca de productos, precios y comparación en tienda.',
-    novedades: ['Biblioteca de productos con precio', 'Tachar al meter al carrito', 'Historial de compras completadas'],
-  },
-  suscripciones: {
-    fase: 'F3', nombre: 'Suscripciones',
-    descripcion: 'Suscripciones con costo y próxima fecha de pago.',
-    novedades: ['Netflix, Spotify y más con costo mensual', 'Próximo pago destacado', 'Total fijo mensual'],
-  },
-  calendario: {
-    fase: 'F3', nombre: 'Calendario de Pagos',
-    descripcion: 'Calendario mensual con pagos recurrentes y vencimientos.',
-    novedades: ['Vista mensual con marcadores', 'Gastos fijos programados', 'Recordatorios de vencimiento'],
-  },
-  retos: {
-    fase: 'F3', nombre: 'Retos Financieros',
-    descripcion: 'Retos de ahorro con progreso y logros desbloqueados.',
-    novedades: ['Retos activos con progreso', 'Logros desbloqueados', 'Rachas de días sin gastos hormiga'],
-  },
-  estadisticas: {
-    fase: 'F3', nombre: 'Estadísticas',
-    descripcion: 'Gráficas de distribución, evolución del balance y ahorro mensual.',
-    novedades: ['Dona de gastos por categoría', 'Evolución del patrimonio', 'Export Excel y PDF profesional'],
-  },
   walletbot: {
     fase: 'F4', nombre: 'WalletBot · Robot de Finanzas',
     descripcion: 'El robot IA del WalletTrack junto a tus otros robots: analiza tu mes y aconseja con tus datos reales.',
@@ -89,6 +70,9 @@ const TITULOS: Partial<Record<VistaApp, string>> = {
   dashboard: 'Dashboard', cuentas: 'Mis Cuentas',
   sobres: 'Sobres de Dinero', deudas: 'Deudas y Apartados',
   presupuestos: 'Presupuestos', metas: 'Metas de Ahorro',
+  compras: 'Lista de Compras', suscripciones: 'Gastos Fijos',
+  calendario: 'Calendario de Pagos', retos: 'Retos Financieros',
+  estadisticas: 'Estadísticas',
   historial: 'Historial', config: 'Configuración',
 };
 
@@ -195,7 +179,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F2</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F3</p>
       </div>
     );
   }
@@ -250,7 +234,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F2 · DINERO
+            F3 · ANÁLISIS
           </span>
           <button
             onClick={() => setVista('config')}
@@ -306,6 +290,27 @@ export default function App() {
           <MetasView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
         )}
 
+        {/* F3 · ANÁLISIS: compras, suscripciones, calendario, retos y estadísticas */}
+        {vista === 'compras' && (
+          <ComprasView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
+        )}
+
+        {vista === 'suscripciones' && (
+          <SuscripcionesView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
+        )}
+
+        {vista === 'calendario' && (
+          <CalendarioView estado={estado} />
+        )}
+
+        {vista === 'retos' && (
+          <RetosView estado={estado} onAplicar={aplicar} onToast={mostrarToast} />
+        )}
+
+        {vista === 'estadisticas' && (
+          <EstadisticasView estado={estado} onToast={mostrarToast} />
+        )}
+
         {vista === 'historial' && (
           <HistorialView
             estado={estado}
@@ -325,7 +330,7 @@ export default function App() {
           />
         )}
 
-        {/* Vistas F3+: candado + qué traerán */}
+        {/* Vistas F4+: candado + qué traerán */}
         {infoFutura && (
           <VistaBloqueada
             nombre={infoFutura.nombre}

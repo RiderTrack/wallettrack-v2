@@ -326,10 +326,12 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               Sobres de dinero, deudas y apartados, presupuestos con barras y alertas, metas de ahorro con aportes — con nube desde el día 1.
             </p>
           </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-xs font-black text-teal-400">F3 · Análisis y control</p>
+          <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3">
+            <p className="text-xs font-black text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5" /> F3 · Análisis y control ✓ (instalada)
+            </p>
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              Estadísticas con gráficas, suscripciones, calendario de pagos, retos, lista de compras y export Excel/PDF.
+              Estadísticas con gráficas, gastos fijos (suscripciones) con botón Pagar, calendario de pagos, retos financieros, lista de compras con biblioteca de productos y export Excel/PDF.
             </p>
           </div>
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">

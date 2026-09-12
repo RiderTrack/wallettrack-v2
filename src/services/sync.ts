@@ -27,7 +27,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { versionApp } from './platform';
 import { alPersistir, leerEstado, persistirSilencioso } from './estado';
-import type { EstadoWallet, RegistroSensible, Transaccion } from '../types';
+import type { EstadoWallet, ItemCompra, Transaccion } from '../types';
 
 /** Firestore: un doc por usuario con TODO su dinero */
 const RUTA_SYNC = 'wallettrack_sync';
@@ -113,13 +113,13 @@ function combinarObjetos<T>(
   return out;
 }
 
-/** Lista de compras activa: une items por id, gana la más nueva */
+/** Lista de compras activa: une items por id, gana la más nueva (F3: items tipados — misma forma de datos) */
 function combinarListaCompras(
   local: EstadoWallet['listaCompras'],
   remoto: EstadoWallet['listaCompras'],
   remotoGana: boolean,
 ): EstadoWallet['listaCompras'] {
-  const items = unirPorId<RegistroSensible>(
+  const items = unirPorId<ItemCompra>(
     local?.items ?? [], remoto?.items ?? [], remotoGana,
   );
   return { items, creada: remotoGana ? (remoto?.creada ?? null) : (local?.creada ?? null) };

@@ -69,7 +69,9 @@ export interface Suscripcion {
   id: string;
   name: string;
   cost: number;
-  due: string;
+  due: string;               // 'YYYY-MM-DD' próximo pago (+1 mes al pagar)
+  emoji?: string;            // F3: icono del fijo (original lo guardaba si lo elegías)
+  cuenta?: string;           // F3: id de cuenta desde donde se paga (default efectivo)
 }
 
 export interface Reto {
@@ -139,6 +141,39 @@ export interface RegistroSensible {
   [clave: string]: unknown;
 }
 
+// ── F3 · ANÁLISIS: formas EXACTAS del viejo (compras) ────────
+/** Producto de la biblioteca (wallettrack_productos) */
+export interface ProductoBiblioteca {
+  id: string;                     // 'prod_' + Date.now() (formato del viejo)
+  emoji: string;
+  nombre: string;
+  precio: number | null;          // null = sin precio de referencia aún
+  unidad: 'kg' | 'und' | 'paq' | 'lt' | 'monto';
+  historialPrecios: { fecha: string; precio: number }[];  // máx 30 (regla del viejo)
+}
+
+/** Item de la lista activa (wallettrack_lista_compras.items) */
+export interface ItemCompra {
+  id: string;                     // 'item_' + ts + '_rand' (formato del viejo)
+  productoId: string;
+  nombre: string;
+  emoji: string;
+  unidad: ProductoBiblioteca['unidad'];
+  precio: number | null;          // null = se llena en el mercado (regla del viejo)
+  precioRef?: number | null;      // solo referencia visual de la biblioteca
+  cantidad: number;               // pasos de 0.5 en kg/lt, 1 en el resto
+  comprado: boolean;
+}
+
+/** Compra cerrada del historial (wallettrack_compras_hist, máx 24) */
+export interface CompraHistorial {
+  id: string;                     // 'compra_' + Date.now() (formato del viejo)
+  fecha: string;                  // 'YYYY-MM-DD'
+  total: number;
+  cuenta: string;
+  items: ItemCompra[];            // snapshot de la lista al cerrar
+}
+
 // ── Estado global (espejo del AppState del viejo) ─────────────
 export interface EstadoWallet {
   transactions: Transaccion[];
@@ -154,9 +189,9 @@ export interface EstadoWallet {
   sobreMovs: SobreMov[];
   deudas: Deuda[];
   deudaMovs: DeudaMov[];
-  productos: RegistroSensible[];
-  listaCompras: { items: RegistroSensible[]; creada: string | null };
-  comprasHist: RegistroSensible[];
+  productos: ProductoBiblioteca[];       // F3 · formas reales del viejo
+  listaCompras: { items: ItemCompra[]; creada: string | null };
+  comprasHist: CompraHistorial[];
   gastosRapidos: GastoRapido[];
 }
 
@@ -177,8 +212,8 @@ export interface RespaldoWallet {
   sobreMovs?: SobreMov[];
   deudas?: Deuda[];
   deudaMovs?: DeudaMov[];
-  productos?: RegistroSensible[];
-  listaCompras?: { items: RegistroSensible[]; creada: string | null };
-  comprasHist?: RegistroSensible[];
+  productos?: ProductoBiblioteca[];
+  listaCompras?: { items: ItemCompra[]; creada: string | null };
+  comprasHist?: CompraHistorial[];
   gastosRapidos?: GastoRapido[];
 }

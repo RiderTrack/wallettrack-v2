@@ -16,7 +16,7 @@ un backup hecho en la app vieja importa sin conversión.
 | F0 | ✅ | Base modular: Dashboard (patrimonio, flujo del mes, gastos rápidos, cuentas, últimos movimientos), Cuentas (saldos iniciales, transferencias, tarjetas), Historial (filtros + CSV + eliminar), Configuración (respaldo JSON v3.0), ☰ menú hamburguesa, barra inferior de 4 destinos, CI con APK firmado |
 | F1 | ✅ | Acceso: login con Google (Firebase), modo local 100 % offline, respaldo en la nube wallettrack_sync/{uid} con merge sin borrar |
 | F2 | ✅ | El método completo: Sobres de dinero (recargar/gastar/historial), Deudas y apartados (cuotas + apartar semanal), Presupuestos por categoría con alertas 80 %/100 %, Metas de ahorro con aportes |
-| F3 | 🔒 | Estadísticas con gráficas, Suscripciones, Calendario de pagos, Retos, Lista de compras, Export Excel/PDF |
+| F3 | ✅ | Análisis y control: Estadísticas con gráficas SVG (evolución + ahorro %), Gastos Fijos con botón Pagar (+1 mes), Calendario de pagos mensual, Retos financieros, Lista de compras con biblioteca de productos e historial, Export Excel (5 hojas) y PDF |
 | F4 | 🔒 | 🤖 WalletBot — robot IA de finanzas con tus datos reales |
 
 ## 🏗️ Desarrollo local
@@ -49,11 +49,17 @@ src/
     HistorialView.tsx    # Tabla con filtros + export CSV
     ConfiguracionView.tsx# Respaldo JSON v3.0 + roadmap
     ModalTransaccion.tsx # Form de ingreso/gasto
-    VistaBloqueada.tsx   # Placeholder de F1-F3
+    VistaBloqueada.tsx   # Placeholder de F4
   services/
     estado.ts            # 19 claves wallettrack_* + respaldo v3.0
     dinero.ts            # Formato S/ es-PE + fechas
     archivo.ts           # Export/compartir (APK y web)
+    exportar.ts          # F3: Excel (5 hojas) + PDF con import dinámico
     platform.ts          # Entorno + versión
   data/catalogos.ts     # Cuentas y categorías del original
 ```
+
+> F3 añade: SobresView · DeudasView · PresupuestosView · MetasView (F2) y
+> ComprasView · SuscripcionesView · CalendarioView · RetosView ·
+> EstadisticasView + GraficasStats (F3). El Excel/PDF usa exceljs + jspdf
+> como dependencias con import dinámico (chunks separados, offline en APK).

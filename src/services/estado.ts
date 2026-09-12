@@ -7,8 +7,9 @@
 // ═══════════════════════════════════════════════════════════
 
 import type {
-  Deuda, DeudaMov, EstadoWallet, GastoRapido, Meta, Presupuesto,
-  RespaldoWallet, Sobre, SobreMov, Transaccion,
+  CompraHistorial, Deuda, DeudaMov, EstadoWallet, GastoRapido, ItemCompra, Meta,
+  Presupuesto, ProductoBiblioteca, RespaldoWallet, Reto, Sobre, SobreMov,
+  Suscripcion, Transaccion,
 } from '../types';
 import { CUENTAS_CATALOG, CATS_GASTO_DEFAULT, GASTOS_RAPIDOS_DEFAULT } from '../data/catalogos';
 import { hoyISO, mesActualISO, esDelMes } from './dinero';
@@ -624,6 +625,419 @@ export function eliminarMeta(estado: EstadoWallet, id: string): EstadoWallet {
   return { ...estado, goals: estado.goals.filter((g) => g.id !== id) };
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🔄 F3 · SUSCRIPCIONES — gastos fijos con cuenta + emoji,
+// formas exactas del viejo (wallettrack_subscriptions)
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosSuscripcion {
+  name: string;
+  cost: number;
+  due: string;
+  emoji: string;
+  cuenta: string;
+}
+
+export function crearSuscripcion(
+  estado: EstadoWallet, datos: DatosSuscripcion,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.name.trim()) return { estado, ok: false, error: 'Ingresa el nombre del gasto fijo' };
+  if (!(datos.cost > 0)) return { estado, ok: false, error: 'Ingresa un monto válido' };
+  if (!datos.due) return { estado, ok: false, error: 'Ingresa la fecha de vencimiento' };
+  const sub: Suscripcion = {
+    id: idUnico(estado.subscriptions),          // Date.now() estilo del viejo
+    name: datos.name.trim(),
+    cost: datos.cost,
+    due: datos.due,
+    emoji: datos.emoji || '🔄',
+    cuenta: datos.cuenta || 'efectivo',
+  };
+  return { estado: { ...estado, subscriptions: [...estado.subscriptions, sub] }, ok: true };
+}
+
+export function editarSuscripcion(
+  estado: EstadoWallet, id: string, datos: DatosSuscripcion,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!estado.subscriptions.some((s) => s.id === id)) return { estado, ok: false, error: 'Suscripción no encontrada' };
+  if (!datos.name.trim()) return { estado, ok: false, error: 'El nombre no puede quedar vacío' };
+  if (!(datos.cost > 0)) return { estado, ok: false, error: 'Ingresa un monto válido' };
+  if (!datos.due) return { estado, ok: false, error: 'Ingresa la fecha de vencimiento' };
+  return {
+    estado: {
+      ...estado,
+      subscriptions: estado.subscriptions.map((s) => s.id === id ? {
+        ...s, name: datos.name.trim(), cost: datos.cost, due: datos.due,
+        emoji: datos.emoji || '🔄', cuenta: datos.cuenta || 'efectivo',
+      } : s),
+    },
+    ok: true,
+  };
+}
+
+export function eliminarSuscripcion(estado: EstadoWallet, id: string): EstadoWallet {
+  return { ...estado, subscriptions: estado.subscriptions.filter((s) => s.id !== id) };
+}
+
+/** Paga el fijo: gasto REAL desde su cuenta + próxima fecha +1 mes (regla del viejo) */
+export function pagarSuscripcion(
+  estado: EstadoWallet, id: string,
+): { estado: EstadoWallet; ok: boolean; error?: string; sub?: Suscripcion } {
+  const sub = estado.subscriptions.find((s) => s.id === id);
+  if (!sub) return { estado, ok: false, error: 'Suscripción no encontrada' };
+  const emoji = sub.emoji || '🔄';
+  const t: Transaccion = {
+    id: idUnico(estado.transactions),
+    date: hoyISO(),
+    type: 'expense',
+    category: `${emoji} ${sub.name}`,                 // categoría literal del viejo
+    amount: sub.cost,
+    description: `${emoji} Pago fijo: ${sub.name}`,   // descripción literal del viejo
+    account: sub.cuenta || 'efectivo',
+  };
+  const pagada: Suscripcion = { ...sub, due: mesSiguiente(sub.due) };
+  return {
+    estado: {
+      ...estado,
+      transactions: [t, ...estado.transactions],
+      subscriptions: estado.subscriptions.map((s) => (s.id === id ? pagada : s)),
+    },
+    ok: true,
+    sub: pagada,
+  };
+}
+
+/** Días hasta el vencimiento (negativo = vencido) — reglas de color del viejo */
+export function diasHasta(due: string): number {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const fecha = new Date(`${due}T00:00:00`);
+  return Math.round((fecha.getTime() - hoy.getTime()) / 86_400_000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🏆 F3 · RETOS — toggle completo/activo del viejo
+// (wallettrack_challenges)
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosReto {
+  name: string;
+  desc: string;
+  target: number;   // monto o días según el reto
+}
+
+export function crearReto(
+  estado: EstadoWallet, datos: DatosReto,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.name.trim()) return { estado, ok: false, error: 'Ingresa el nombre del reto' };
+  if (!(datos.target > 0)) return { estado, ok: false, error: 'Ingresa el objetivo del reto' };
+  const reto: Reto = {
+    id: idUnico(estado.challenges),
+    name: datos.name.trim(),
+    desc: datos.desc.trim() || 'Reto personalizado',
+    target: datos.target,
+    current: 0,
+    status: 'active',
+  };
+  return { estado: { ...estado, challenges: [...estado.challenges, reto] }, ok: true };
+}
+
+/** Marca/desmarca el reto (toggleChallenge del viejo) */
+export function toggleReto(estado: EstadoWallet, id: string): EstadoWallet {
+  return {
+    ...estado,
+    challenges: estado.challenges.map((c) => c.id === id
+      ? { ...c, status: c.status === 'complete' ? 'active' : 'complete', current: c.status === 'complete' ? c.current : c.target }
+      : c),
+  };
+}
+
+export function eliminarReto(estado: EstadoWallet, id: string): EstadoWallet {
+  return { ...estado, challenges: estado.challenges.filter((c) => c.id !== id) };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🛒 F3 · LISTA DE COMPRAS — biblioteca + lista + historial,
+// formas exactas del viejo (productos / lista_compras / compras_hist)
+// ═══════════════════════════════════════════════════════════
+
+export type UnidadProducto = ProductoBiblioteca['unidad'];
+
+export const UNIDADES: { id: UnidadProducto; label: string }[] = [
+  { id: 'und', label: 'und' }, { id: 'kg', label: 'kg' }, { id: 'paq', label: 'paq' },
+  { id: 'lt', label: 'L' }, { id: 'monto', label: 'monto' },
+];
+
+export function unidadLabel(u: string): string {
+  return ({ kg: 'kg', und: 'und', paq: 'paq', lt: 'L', monto: 'monto' } as Record<string, string>)[u] || u;
+}
+
+/** Paso de cantidad del viejo: 0.5 en kg/lt, 1 en el resto */
+export function pasoUnidad(u: string): number {
+  return (u === 'kg' || u === 'lt') ? 0.5 : 1;
+}
+
+export interface DatosProducto {
+  emoji: string;
+  nombre: string;
+  precio: number | null;
+  unidad: UnidadProducto;
+}
+
+function itemCompraId(existentes: { id: string }[]): string {
+  // 'item_' + ts + '_' + rand — formato del viejo
+  let id = `item_${Date.now()}_${Math.floor(Math.random() * 999)}`;
+  while (existentes.some((i) => i.id === id)) {
+    id = `item_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+  }
+  return id;
+}
+
+function productoId(existentes: { id: string }[]): string {
+  // 'prod_' + ts — formato del viejo, con anti-colisión
+  const base = `prod_${Date.now()}`;
+  if (!existentes.some((p) => p.id === base)) return base;
+  let n = 1;
+  while (existentes.some((p) => p.id === `${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+/** Registra el precio en el historial del producto (máx 30 entradas, regla del viejo) */
+function registrarPrecioHistorial(prod: ProductoBiblioteca, precio: number): ProductoBiblioteca {
+  const historial = [...(prod.historialPrecios || [])];
+  const hoy = hoyISO();
+  const ult = historial[historial.length - 1];
+  if (ult && ult.fecha === hoy) historial[historial.length - 1] = { fecha: hoy, precio };
+  else historial.push({ fecha: hoy, precio });
+  return { ...prod, precio, historialPrecios: historial.slice(-30) };
+}
+
+export function crearProducto(
+  estado: EstadoWallet, datos: DatosProducto, agregarALista: boolean,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.nombre.trim()) return { estado, ok: false, error: 'Ponle un nombre al producto' };
+  if (estado.productos.some((p) => p.nombre.toLowerCase() === datos.nombre.trim().toLowerCase())) {
+    return { estado, ok: false, error: `Ya tienes "${datos.nombre.trim()}" en tu biblioteca` };
+  }
+  if (datos.precio !== null && !(datos.precio >= 0)) return { estado, ok: false, error: 'Precio inválido' };
+  const prod: ProductoBiblioteca = {
+    id: productoId(estado.productos),
+    emoji: datos.emoji || '📦',
+    nombre: datos.nombre.trim(),
+    precio: datos.precio,
+    unidad: datos.unidad,
+    historialPrecios: datos.precio !== null ? [{ fecha: hoyISO(), precio: datos.precio }] : [],
+  };
+  let nuevo: EstadoWallet = { ...estado, productos: [...estado.productos, prod] };
+  if (agregarALista) nuevo = _agregarItemDeProducto(nuevo, prod);
+  return { estado: nuevo, ok: true };
+}
+
+export function editarProducto(
+  estado: EstadoWallet, id: string, datos: DatosProducto,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  const prod = estado.productos.find((p) => p.id === id);
+  if (!prod) return { estado, ok: false, error: 'Producto no encontrado' };
+  if (!datos.nombre.trim()) return { estado, ok: false, error: 'El nombre no puede quedar vacío' };
+  if (datos.precio !== null && !(datos.precio >= 0)) return { estado, ok: false, error: 'Precio inválido' };
+  let actualizado = { ...prod, emoji: datos.emoji || '📦', nombre: datos.nombre.trim(), unidad: datos.unidad };
+  if (datos.precio !== null && prod.precio !== datos.precio) {
+    actualizado = registrarPrecioHistorial(actualizado, datos.precio);
+  } else if (datos.precio === null) {
+    actualizado = { ...actualizado, precio: null };
+  }
+  // Sincroniza nombre/emoji/unidad/referencia en items de la lista — NO pisa
+  // el precio ya puesto en el mercado (regla textual del viejo)
+  const items = estado.listaCompras.items.map((it) => it.productoId === id
+    ? { ...it, nombre: actualizado.nombre, emoji: actualizado.emoji, unidad: actualizado.unidad, precioRef: actualizado.precio }
+    : it);
+  return {
+    estado: {
+      ...estado,
+      productos: estado.productos.map((p) => (p.id === id ? actualizado : p)),
+      listaCompras: { ...estado.listaCompras, items },
+    },
+    ok: true,
+  };
+}
+
+export function eliminarProducto(estado: EstadoWallet, id: string): EstadoWallet {
+  return {
+    ...estado,
+    productos: estado.productos.filter((p) => p.id !== id),
+    listaCompras: { ...estado.listaCompras, items: estado.listaCompras.items.filter((i) => i.productoId !== id) },
+  };
+}
+
+/** Suma un producto de la biblioteca a la lista (o sube cantidad si ya está) */
+function _agregarItemDeProducto(estado: EstadoWallet, prod: ProductoBiblioteca): EstadoWallet {
+  const items = [...estado.listaCompras.items];
+  const existente = items.find((it) => it.productoId === prod.id);
+  if (existente) {
+    if (prod.unidad !== 'monto') {
+      existente.cantidad = parseFloat((existente.cantidad + pasoUnidad(prod.unidad)).toFixed(2));
+    }
+  } else {
+    items.push({
+      id: itemCompraId(items),
+      productoId: prod.id,
+      nombre: prod.nombre,
+      emoji: prod.emoji,
+      unidad: prod.unidad,
+      precio: null,               // se llena en el mercado — no lo dictamos
+      precioRef: prod.precio,     // solo como referencia visual
+      cantidad: 1,
+      comprado: false,
+    });
+  }
+  return { ...estado, listaCompras: { ...estado.listaCompras, items } };
+}
+
+export function agregarProductoALista(estado: EstadoWallet, productoId: string): EstadoWallet {
+  const prod = estado.productos.find((p) => p.id === productoId);
+  if (!prod) return estado;
+  return _agregarItemDeProducto(estado, prod);
+}
+
+export function toggleComprado(estado: EstadoWallet, itemId: string): EstadoWallet {
+  return {
+    ...estado,
+    listaCompras: {
+      ...estado.listaCompras,
+      items: estado.listaCompras.items.map((i) => i.id === itemId ? { ...i, comprado: !i.comprado } : i),
+    },
+  };
+}
+
+export function cambiarCantidad(estado: EstadoWallet, itemId: string, dir: 1 | -1): EstadoWallet {
+  return {
+    ...estado,
+    listaCompras: {
+      ...estado.listaCompras,
+      items: estado.listaCompras.items.map((i) => {
+        if (i.id !== itemId || i.unidad === 'monto') return i;
+        const paso = pasoUnidad(i.unidad);
+        let nueva = parseFloat((i.cantidad + dir * paso).toFixed(2));
+        if (nueva < paso) nueva = paso;
+        return { ...i, cantidad: nueva };
+      }),
+    },
+  };
+}
+
+export function quitarItemLista(estado: EstadoWallet, itemId: string): EstadoWallet {
+  return {
+    ...estado,
+    listaCompras: { ...estado.listaCompras, items: estado.listaCompras.items.filter((i) => i.id !== itemId) },
+  };
+}
+
+export interface DatosPrecioItem {
+  itemId: string;
+  valor: number;        // lo que se ingresó (unitario o total)
+  modo: 'unitario' | 'total';
+  cantidad: number;     // usada si modo = total
+}
+
+/**
+ * Pone el precio del item EN EL MERCADO: si fue total lo divide,
+ * actualiza la biblioteca y su historial de precios (como el viejo).
+ */
+export function guardarPrecioItem(
+  estado: EstadoWallet, datos: DatosPrecioItem,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  const it = estado.listaCompras.items.find((i) => i.id === datos.itemId);
+  if (!it) return { estado, ok: false, error: 'Item no encontrado' };
+  if (!(datos.valor >= 0)) return { estado, ok: false, error: 'Ingresa un valor válido' };
+  let precioUnitario: number;
+  let cantidadFinal: number;
+  if (it.unidad === 'monto') {
+    cantidadFinal = 1;
+    precioUnitario = datos.valor;   // el "precio" ES el monto total
+  } else {
+    cantidadFinal = datos.cantidad;
+    if (!(cantidadFinal > 0)) return { estado, ok: false, error: 'Ingresa una cantidad válida' };
+    precioUnitario = datos.modo === 'total' ? datos.valor / cantidadFinal : datos.valor;
+  }
+  const items = estado.listaCompras.items.map((i) => i.id === datos.itemId
+    ? { ...i, cantidad: parseFloat(cantidadFinal.toFixed(2)), precio: parseFloat(precioUnitario.toFixed(4)) }
+    : i);
+  let productos = estado.productos;
+  const prod = estado.productos.find((p) => p.id === it.productoId);
+  if (prod) {
+    const actualizado = registrarPrecioHistorial(prod, parseFloat(precioUnitario.toFixed(2)));
+    productos = estado.productos.map((p) => (p.id === prod.id ? actualizado : p));
+  }
+  return {
+    estado: { ...estado, productos, listaCompras: { ...estado.listaCompras, items } },
+    ok: true,
+  };
+}
+
+export interface ResultadoCierreCompras {
+  estado: EstadoWallet;
+  ok: boolean;
+  error?: string;
+  total?: number;
+  cuenta?: string;
+  nComprados?: number;
+}
+
+/** Cierra la compra: gasto real 'Alimentación' + archiva historial (máx 24, regla del viejo) */
+export function cerrarCompras(estado: EstadoWallet, cuenta: string): ResultadoCierreCompras {
+  const comprados = estado.listaCompras.items.filter((i) => i.comprado);
+  if (comprados.length === 0) return { estado, ok: false, error: 'Marca al menos un producto como comprado' };
+  const total = comprados.reduce((a, i) => a + (Number(i.precio) || 0) * (Number(i.cantidad) || 0), 0);
+  const t: Transaccion = {
+    id: idUnico(estado.transactions),
+    date: hoyISO(),
+    type: 'expense',
+    category: 'Alimentación',
+    amount: parseFloat(total.toFixed(2)),
+    description: `🛒 Compras — ${comprados.length} productos`,   // descripción literal del viejo
+    account: cuenta || 'efectivo',
+  };
+  const hist: CompraHistorial = {
+    id: `compra_${Date.now()}`,
+    fecha: hoyISO(),
+    total: parseFloat(total.toFixed(2)),
+    cuenta: cuenta || 'efectivo',
+    items: JSON.parse(JSON.stringify(estado.listaCompras.items)) as ItemCompra[],
+  };
+  const comprasHist = [hist, ...estado.comprasHist].slice(0, 24);
+  return {
+    estado: {
+      ...estado,
+      transactions: [t, ...estado.transactions],
+      comprasHist,
+      listaCompras: { items: [], creada: hoyISO() },
+    },
+    ok: true,
+    total: parseFloat(total.toFixed(2)),
+    cuenta: cuenta || 'efectivo',
+    nComprados: comprados.length,
+  };
+}
+
+/** Recrea la lista desde la última compra archivada (repetirUltimaCompra del viejo) */
+export function repetirUltimaCompra(estado: EstadoWallet): EstadoWallet {
+  const hist = estado.comprasHist[0];
+  if (!hist) return estado;
+  const items = [...estado.listaCompras.items];
+  for (const vi of hist.items) {
+    const prod = estado.productos.find((p) => p.id === vi.productoId);
+    items.push({
+      id: itemCompraId(items),
+      productoId: vi.productoId,
+      nombre: prod ? prod.nombre : vi.nombre,
+      emoji: prod ? prod.emoji : vi.emoji,
+      unidad: prod ? prod.unidad : vi.unidad,
+      precio: prod ? prod.precio : vi.precio,
+      cantidad: vi.cantidad,
+      comprado: false,
+    });
+  }
+  return { ...estado, listaCompras: { ...estado.listaCompras, items } };
+}
+
 // ── Saldos ────────────────────────────────────────────────────
 export function saldoCuenta(estado: EstadoWallet, accountId: string): number {
   const inicial = Number(estado.saldosIniciales[accountId] ?? 0) || 0;
@@ -656,6 +1070,39 @@ export function resumenMes(estado: EstadoWallet, mesISO = mesActualISO()): { ing
     else gastos += monto;
   }
   return { ingresos, gastos };
+}
+
+// ── F3 · Resumen de TODOS los meses (getResumenMeses del viejo) ─
+export interface ResumenMesCalculado {
+  mes: string;        // 'YYYY-MM'
+  label: string;      // 'sep 26' (mes corto es-PE)
+  ingresos: number;
+  gastos: number;
+  ahorro: number;
+  pctAhorro: number;  // ahorro / ingresos × 100 (0 si no hubo ingresos)
+}
+
+/** Todos los meses con data, orden ascendente — excluye fondo empresa y ✉️ sobres (reglas del viejo) */
+export function resumenMeses(estado: EstadoWallet): ResumenMesCalculado[] {
+  const mapa: Record<string, { ingresos: number; gastos: number }> = {};
+  for (const t of estado.transactions) {
+    if (t.category === '__fondo_empresa__' || t.esSobre) continue;  // excluir fondo empresa y apartados
+    const m = (t.date || '').substring(0, 7);
+    if (!m) continue;
+    if (!mapa[m]) mapa[m] = { ingresos: 0, gastos: 0 };
+    const monto = Number(t.amount) || 0;
+    if (t.type === 'income') mapa[m].ingresos += monto;
+    else mapa[m].gastos += monto;
+  }
+  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return Object.entries(mapa)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([mes, v]) => {
+      const [y, m] = mes.split('-');
+      const ahorro = v.ingresos - v.gastos;
+      const pctAhorro = v.ingresos > 0 ? (ahorro / v.ingresos) * 100 : 0;
+      return { mes, label: `${MESES[+m - 1]} ${String(y).slice(2)}`, ingresos: v.ingresos, gastos: v.gastos, ahorro, pctAhorro };
+    });
 }
 
 // ── Respaldo JSON (formato v3.0 del viejo) ────────────────────
