@@ -1,0 +1,84 @@
+{
+  "project_info": {
+    "project_number": "202098578518",
+    "project_id": "fittrack-e06be",
+    "storage_bucket": "fittrack-e06be.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:202098578518:android:36275a1a5e687a42b017f7",
+        "android_client_info": {
+          "package_name": "com.fittrack.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "202098578518-cf3hhtlgh6hj7gl2ta3fo8f4p2lt7un9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fittrack.app",
+            "certificate_hash": "14c7878cf2f6fc770ade5fa68da83a6127964ebe"
+          }
+        },
+        {
+          "client_id": "202098578518-oaod3guds460vgng4gid8gmemol429c2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fittrack.app",
+            "certificate_hash": "cb4089a91ac9b009bb54a8eb314d8a31c9b7b0b9"
+          }
+        },
+        {
+          "client_id": "202098578518-0b5e3vcnv4ark4955k3ek5gjl9eeoct8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZxtOgRdEE4C6wL6w4CxmCLBT356upqE0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "202098578518-0b5e3vcnv4ark4955k3ek5gjl9eeoct8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:202098578518:android:4bb30243ce2ff3aab017f7",
+        "android_client_info": {
+          "package_name": "com.wallettrack.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "202098578518-0b5e3vcnv4ark4955k3ek5gjl9eeoct8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZxtOgRdEE4C6wL6w4CxmCLBT356upqE0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "202098578518-0b5e3vcnv4ark4955k3ek5gjl9eeoct8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

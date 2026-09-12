@@ -51,21 +51,29 @@ jobs:
       - name: Sync Capacitor plugins
         run: npx cap sync android
 
-      - name: F1 · Versionar APK (versionCode 2 · versionName 1.1.0)
+      # ── F1.1 · El google-services.json del proyecto Firebase ──
+      # (baja de la console del fittrack-e06be, incluye la app
+      # com.wallettrack.app). Mismo paso que el CI del FitTrack V2.
+      - name: Copy google-services.json
+        run: cp google-services.json android/app/google-services.json
+
+      - name: F1.1 · Versionar APK (versionCode 3 · versionName 1.1.1)
         run: |
           GRADLE="android/app/build.gradle"
-          sed -i 's/versionCode 1/versionCode 2/' "$GRADLE"
-          sed -i 's/versionName "1.0"/versionName "1.1.0"/' "$GRADLE"
-          echo "✅ versionCode 2 · versionName 1.1.0"
+          sed -i 's/versionCode 1/versionCode 3/' "$GRADLE"
+          sed -i 's/versionName "1.0"/versionName "1.1.1"/' "$GRADLE"
+          echo "✅ versionCode 3 · versionName 1.1.1"
           grep -E "versionCode|versionName" "$GRADLE" || true
 
-      # ── F1 · GOOGLE LOGIN (patrón exacto del FitTrack V2) ────
-      # El plugin nativo @codetrix-studio/capacitor-google-auth lee
-      # server_client_id de strings.xml. Reutilizamos el MISMO
-      # proyecto Firebase del FitTrack (fittrack-e06be): su web
-      # client (client_type 3) sirve para todas las apps del
-      # proyecto. Falta solo registrar la app Android en Firebase
-      # Console (com.wallettrack.app + SHA-1) — paso del LEEME.
+      # ── F1.1 · GOOGLE LOGIN (patrón exacto del FitTrack V2) ────
+      # FIX de "Plugin nativo no disponible": el plugin lee su
+      # clientId de capacitor.config.json (plugins.GoogleAuth con
+      # scopes) — sin scopes el load() del plugin truena y Capacitor
+      # lo dropea (todo da "not implemented"). El strings.xml queda
+      # como respaldo. Reutilizamos el MISMO proyecto Firebase del
+      # FitTrack (fittrack-e06be): su web client (client_type 3)
+      # sirve para todas las apps del proyecto. Falta solo registrar
+      # el SHA-1 de esta app en Firebase Console — paso del LEEME.
       - name: F1 · Configurar GoogleAuth (strings.xml + server_client_id)
         run: |
           mkdir -p android/app/src/main/res/values
@@ -204,7 +212,7 @@ jobs:
       # Console el SHA-1 de la firma del APK. Este paso lo imprime
       # en el log para copiarlo y pegarlo en la consola de
       # fittrack-e06be (app Android com.wallettrack.app).
-      - name: F1 · Imprimir SHA-1 del keystore (para Firebase Console)
+      - name: F1.1 · Imprimir SHA-1 del keystore (para Firebase Console)
         run: |
           STORE_PASS="${{ secrets.STORE_PASSWORD }}"
           if [ -z "$STORE_PASS" ]; then STORE_PASS="wallettrack123"; fi
@@ -228,14 +236,14 @@ jobs:
           KEY_PASS="${{ secrets.KEY_PASSWORD }}"
           if [ -z "$STORE_PASS" ]; then STORE_PASS="wallettrack123"; echo "⚠️ STORE_PASSWORD no configurado — usando clave temporal del viejo"; fi
           if [ -z "$KEY_PASS" ]; then KEY_PASS="wallettrack123"; echo "⚠️ KEY_PASSWORD no configurado — usando clave temporal del viejo"; fi
-          $APKSIGNER sign --ks release.keystore --ks-key-alias wallettrack --ks-pass "pass:$STORE_PASS" --key-pass "pass:$KEY_PASS" --out WalletTrack-V2-F1.apk WalletTrack-aligned.apk
+          $APKSIGNER sign --ks release.keystore --ks-key-alias wallettrack --ks-pass "pass:$STORE_PASS" --key-pass "pass:$KEY_PASS" --out WalletTrack-V2-F1.1.apk WalletTrack-aligned.apk
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: WalletTrack-V2-APK
-          path: WalletTrack-V2-F1.apk
+          path: WalletTrack-V2-F1.1.apk
           retention-days: 30
 
       - name: Show APK info
-        run: du -sh WalletTrack-V2-F1.apk
+        run: du -sh WalletTrack-V2-F1.1.apk

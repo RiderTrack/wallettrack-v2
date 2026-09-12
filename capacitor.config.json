@@ -12,6 +12,12 @@
     "webContentsDebuggingEnabled": false
   },
   "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "202098578518-0b5e3vcnv4ark4955k3ek5gjl9eeoct8.apps.googleusercontent.com",
+      "clientId": "202098578518-0b5e3vcnv4ark4955k3ek5gjl9eeoct8.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    },
     "Filesystem": {
       "permissions": ["publicStorage"]
     },
