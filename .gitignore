@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+android/
+
+# Secrets y entorno
+.env
+.env.*
+*.local
+serviceAccountKey.json
+*.keystore
+*.jks
+
+# Sistema
+.DS_Store
+Thumbs.db

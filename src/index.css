@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   🎨 WALLETTRACK V2 — TEMA OSCURO (F0)
+   Mismo mecanismo que FitTrack V2: Tailwind v4 compila cada
+   utilidad de color como variable CSS. Acento de marca: esmeralda
+   (identidad dinero de WalletTrack, heredada del HTML original
+   #10b981) sobre base slate — el mismo ADN visual del FitTrack.
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer base {
+  body {
+    /* Fondo oscuro #020617 (slate-950), como el WalletTrack original */
+    @apply bg-slate-950 text-slate-100 antialiased font-sans selection:bg-emerald-500 selection:text-white;
+  }
+}
+
+/* Ocultar scrollbar (chips horizontales) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom Scrollbar (mismo look que FitTrack V2) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+/* Aparición suave de vistas (transición de cambio de pantalla) */
+@keyframes wtAparece {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.wt-aparece { animation: wtAparece .25s ease-out; }
