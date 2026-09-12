@@ -1,10 +1,11 @@
 // ═══════════════════════════════════════════════════════════
-// ☰ NAV DRAWER (MENÚ HAMBURGUESA) — WalletTrack V2 (F0)
+// ☰ NAV DRAWER (MENÚ HAMBURGUESA) — WalletTrack V2 (F1)
 // Como pediste: navegación en cajón lateral (mismo patrón del
 // FitTrack V2). Agrupa TODO el WalletTrack en secciones:
 //   Inicio · Dinero · Planificar · Análisis · 🤖 Robots · IA ·
 //   Ajustes
-// Las vistas que llegan en F1+ muestran candado 🔒 con la fase.
+// F1: al pie, tu cuenta Google (o modo local) con cerrar sesión.
+// Las vistas que llegan en F2+ muestran candado 🔒 con la fase.
 // Se abre con el ☰ del header, se cierra con backdrop, X o ESC.
 // ═══════════════════════════════════════════════════════════
 
@@ -12,9 +13,11 @@ import React, { useEffect } from 'react';
 import {
   LayoutDashboard, Wallet, Layers, HandCoins, ShoppingCart, PiggyBank, Target,
   CalendarDays, Repeat, Trophy, History, TrendingUp, Bot, Settings, Lock, X,
+  LogOut, CloudOff,
 } from 'lucide-react';
 import type { VistaApp } from '../types';
 import { versionApp } from '../services/platform';
+import type { CuentaUsuario } from '../hooks/useAuth';
 
 interface ItemNav {
   vista: VistaApp;
@@ -42,20 +45,20 @@ const GRUPOS: GrupoNav[] = [
     acento: 'text-emerald-400',
     items: [
       { vista: 'cuentas',    nombre: 'Mis Cuentas',        icono: <Wallet className="w-4 h-4" /> },
-      { vista: 'sobres',     nombre: 'Sobres de Dinero',   icono: <Layers className="w-4 h-4" />, fase: 'F1' },
-      { vista: 'deudas',     nombre: 'Deudas y Apartados', icono: <HandCoins className="w-4 h-4" />, fase: 'F1' },
-      { vista: 'compras',    nombre: 'Lista de Compras',   icono: <ShoppingCart className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'sobres',     nombre: 'Sobres de Dinero',   icono: <Layers className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'deudas',     nombre: 'Deudas y Apartados', icono: <HandCoins className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'compras',    nombre: 'Lista de Compras',   icono: <ShoppingCart className="w-4 h-4" />, fase: 'F3' },
     ],
   },
   {
     titulo: 'PLANIFICAR',
     acento: 'text-cyan-400',
     items: [
-      { vista: 'presupuestos',   nombre: 'Presupuestos',        icono: <PiggyBank className="w-4 h-4" />, fase: 'F1' },
-      { vista: 'metas',          nombre: 'Metas de Ahorro',     icono: <Target className="w-4 h-4" />, fase: 'F1' },
-      { vista: 'suscripciones',  nombre: 'Suscripciones',       icono: <Repeat className="w-4 h-4" />, fase: 'F2' },
-      { vista: 'calendario',     nombre: 'Calendario de Pagos', icono: <CalendarDays className="w-4 h-4" />, fase: 'F2' },
-      { vista: 'retos',          nombre: 'Retos Financieros',   icono: <Trophy className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'presupuestos',   nombre: 'Presupuestos',        icono: <PiggyBank className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'metas',          nombre: 'Metas de Ahorro',     icono: <Target className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'suscripciones',  nombre: 'Suscripciones',       icono: <Repeat className="w-4 h-4" />, fase: 'F3' },
+      { vista: 'calendario',     nombre: 'Calendario de Pagos', icono: <CalendarDays className="w-4 h-4" />, fase: 'F3' },
+      { vista: 'retos',          nombre: 'Retos Financieros',   icono: <Trophy className="w-4 h-4" />, fase: 'F3' },
     ],
   },
   {
@@ -63,14 +66,14 @@ const GRUPOS: GrupoNav[] = [
     acento: 'text-teal-400',
     items: [
       { vista: 'historial',    nombre: 'Historial',    icono: <History className="w-4 h-4" /> },
-      { vista: 'estadisticas', nombre: 'Estadísticas', icono: <TrendingUp className="w-4 h-4" />, fase: 'F2' },
+      { vista: 'estadisticas', nombre: 'Estadísticas', icono: <TrendingUp className="w-4 h-4" />, fase: 'F3' },
     ],
   },
   {
     titulo: '🤖 ROBOTS · IA',
     acento: 'text-fuchsia-400',
     items: [
-      { vista: 'walletbot', nombre: 'WalletBot · Robot de Finanzas', icono: <Bot className="w-4 h-4" />, fase: 'F3' },
+      { vista: 'walletbot', nombre: 'WalletBot · Robot de Finanzas', icono: <Bot className="w-4 h-4" />, fase: 'F4' },
     ],
   },
   {
@@ -85,11 +88,16 @@ const GRUPOS: GrupoNav[] = [
 interface NavDrawerProps {
   abierto: boolean;
   vista: VistaApp;
+  cuenta: CuentaUsuario | null;   // F1: sesión Google (null = modo local)
+  modoLocal: boolean;
   onCerrar: () => void;
   onIr: (v: VistaApp) => void;
+  onSalir: () => void;            // F1: cerrar sesión / salir del modo local
 }
 
-export const NavDrawer: React.FC<NavDrawerProps> = ({ abierto, vista, onCerrar, onIr }) => {
+export const NavDrawer: React.FC<NavDrawerProps> = ({
+  abierto, vista, cuenta, modoLocal, onCerrar, onIr, onSalir,
+}) => {
   // ESC cierra el cajón
   useEffect(() => {
     if (!abierto) return;
@@ -179,8 +187,41 @@ export const NavDrawer: React.FC<NavDrawerProps> = ({ abierto, vista, onCerrar, 
           ))}
         </nav>
 
-        {/* Pie */}
-        <div className="p-4 border-t border-slate-700/60">
+        {/* Pie: sesión (F1) + branding */}
+        <div className="p-4 border-t border-slate-700/60 space-y-3">
+          {/* Tarjeta de sesión: Google o modo local */}
+          <div className="flex items-center gap-3 bg-slate-950/60 border border-slate-700/60 rounded-2xl p-3">
+            {cuenta?.foto ? (
+              <img
+                src={cuenta.foto}
+                alt=""
+                className="w-9 h-9 rounded-full border border-slate-600 shrink-0"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-sm font-black text-white shrink-0">
+                {(cuenta?.nombre || 'W').trim().charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-white truncate">
+                {cuenta?.nombre || 'Modo local'}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                {cuenta ? (cuenta.email || 'Cuenta Google') : (
+                  <><CloudOff className="w-3 h-3" /> sin nube — datos solo aquí</>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={onSalir}
+              data-testid="boton-cerrar-sesion"
+              title={modoLocal ? 'Salir del modo local' : 'Cerrar sesión'}
+              className="w-9 h-9 rounded-xl border border-slate-600 text-slate-400 hover:text-red-300 hover:border-red-500/50 hover:bg-red-500/10 flex items-center justify-center transition-all shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
           <p className="text-[10px] text-slate-500 text-center leading-relaxed">
             Todo tu dinero en un solo lugar 💰 — datos compatibles con tu WalletTrack original
           </p>

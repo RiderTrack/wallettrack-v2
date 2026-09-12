@@ -1,0 +1,43 @@
+rules_version = '2';
+
+// ⚠️⚠️⚠️ NO PUBLICAR A CIEGAS ⚠️⚠️⚠️
+//
+// Este archivo es DOCUMENTACIÓN de referencia. Las reglas ACTIVAS
+// viven en Firebase Console del proyecto fittrack-e06be (el mismo
+// del FitTrack) y las comparten las apps ya instaladas — publicar
+// desde acá sin revisar podría bloquear al FitTrack actual.
+//
+// F1 solo necesita AGREGAR UN BLOQUE a las reglas existentes.
+// En Firebase Console → Firestore Database → Reglas, agrega esto
+// DENTRO de `match /databases/{database}/documents { ... }`
+// (sin borrar ni tocar nada de lo que ya está):
+//
+//     match /wallettrack_sync/{uid} {
+//       allow read, write: if request.auth != null && request.auth.uid == uid;
+//     }
+//
+// Colección usada por WalletTrack V2 (F1 · Acceso):
+//   wallettrack_sync/{uid} — TODO el dinero del usuario (un doc):
+//   transacciones, saldos, sobres, deudas, presupuestos, metas,
+//   categorías y gastos rápidos. Solo el dueño lee/escribe.
+//
+// Referencia completa (si algún día se quisiera regenerar todo):
+//
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     // FitTrack (ya existente — NO tocar)
+//     match /fittrack_usuarios/{uid} {
+//       allow read, write: if request.auth != null && request.auth.uid == uid;
+//     }
+//     match /fittrack_sync/{uid} {
+//       allow read, write: if request.auth != null && request.auth.uid == uid;
+//     }
+//     match /gymchats/{codigo}/mensajes/{mensajeId} {
+//       allow read, create: if request.auth != null;
+//     }
+//     // WalletTrack V2 (F1 — el bloque nuevo a AGREGAR)
+//     match /wallettrack_sync/{uid} {
+//       allow read, write: if request.auth != null && request.auth.uid == uid;
+//     }
+//   }
+// }

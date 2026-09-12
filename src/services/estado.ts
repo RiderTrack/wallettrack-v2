@@ -33,6 +33,25 @@ const K = {
   security:      'wallettrack_security',
 } as const;
 
+/** F1: expuestas para el sync en la nube (wallettrack_sync) */
+export const CLAVES = K;
+
+// ── Oyentes de persistencia (F1: el sync debouncea con esto) ──
+const _oyentes: ((estado: EstadoWallet) => void)[] = [];
+
+/** Se dispara en CADA persistir() — el sync programa su subida */
+export function alPersistir(cb: ((estado: EstadoWallet) => void) | null): void {
+  if (cb === null) {
+    _oyentes.length = 0;
+    return;
+  }
+  if (!_oyentes.includes(cb)) _oyentes.push(cb);
+}
+
+function notificarOyentes(estado: EstadoWallet) {
+  _oyentes.forEach((cb) => { try { cb(estado); } catch { /* oyente roto */ } });
+}
+
 // ── Helpers de lectura/escritura seguros ──────────────────────
 function leerJSON<T>(clave: string, fallback: T): T {
   try {
@@ -77,6 +96,31 @@ export function leerEstado(): EstadoWallet {
 
 // ── Persistencia (graba las claves del bloque que cambia) ─────
 export function persistir(estado: EstadoWallet): void {
+  guardarJSON(K.transactions,  estado.transactions);
+  guardarJSON(K.goals,         estado.goals);
+  guardarJSON(K.subscriptions, estado.subscriptions);
+  guardarJSON(K.challenges,    estado.challenges);
+  guardarJSON(K.saldos,        estado.saldosIniciales);
+  guardarJSON(K.cards,         estado.cardCustom);
+  guardarJSON(K.budgets,       estado.budgets);
+  guardarJSON(K.catGasto,      estado.categoriasGasto);
+  guardarJSON(K.catIngreso,    estado.categoriasIngreso);
+  guardarJSON(K.sobres,        estado.sobres);
+  guardarJSON(K.sobreMovs,     estado.sobreMovs);
+  guardarJSON(K.deudas,        estado.deudas);
+  guardarJSON(K.deudaMovs,     estado.deudaMovs);
+  guardarJSON(K.productos,     estado.productos);
+  guardarJSON(K.listaCompras,  estado.listaCompras);
+  guardarJSON(K.comprasHist,   estado.comprasHist);
+  guardarJSON(K.gastosRapidos, estado.gastosRapidos);
+  notificarOyentes(estado); // F1: avisa al sync (debounce 8 s)
+}
+
+/**
+ * F1 · Sync: graba las 18 claves SIN avisar a los oyentes
+ * (aplicar datos de la nube no debe re-disparar la subida).
+ */
+export function persistirSilencioso(estado: EstadoWallet): void {
   guardarJSON(K.transactions,  estado.transactions);
   guardarJSON(K.goals,         estado.goals);
   guardarJSON(K.subscriptions, estado.subscriptions);
@@ -302,6 +346,7 @@ export function resetTotal(): EstadoWallet {
       if (clave !== K.theme && clave !== K.security) localStorage.removeItem(clave);
     });
   } catch { /* sin storage */ }
+  notificarOyentes(vacio); // F1: el reset también marca el reloj del sync
   return vacio;
 }
 

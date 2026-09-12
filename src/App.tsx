@@ -1,16 +1,20 @@
 // ═══════════════════════════════════════════════════════════
-// 🚀 APP — WalletTrack V2 (F0 · BASE)
+// 🚀 APP — WalletTrack V2 (F1 · ACCESO)
 // Arquitectura gemela de FitTrack V2:
 //   • Navegación por vista activa (activeView) — sin router
 //   • ☰ Menú hamburguesa (NavDrawer) con TODAS las secciones
 //   • Barra inferior reducida a los 4 destinos de uso diario
 //   • Estado global en services/estado.ts (mismas claves del
 //     wallettrack original — un respaldo viejo importa directo)
-//   • F0: Dashboard + Cuentas + Historial + Configuración reales;
-//     el resto llega en F1-F3 (VistaBloqueada con candado)
+//   • F1: LoginScreen con Google REAL (Firebase) + modo local;
+//     con sesión, TODO se respalda en wallettrack_sync/{uid}
+//     (baja+combina+sube al entrar, cada 5 min, al volver al
+//     frente y 8 s tras cada cambio — debounce).
+//   • El resto de módulos llega en F2+ (VistaBloqueada con candado)
 // ═══════════════════════════════════════════════════════════
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   LayoutDashboard, Wallet, History, Settings, Menu,
 } from 'lucide-react';
@@ -21,6 +25,9 @@ import {
   registrarGastoRapido, guardarSaldosIniciales, hacerTransferencia,
   importarRespaldo, resetTotal,
 } from './services/estado';
+import { cerrarSesion } from './services/firebase';
+import { initSync } from './services/sync';
+import { useAuth, esModoLocal, marcarModoLocal } from './hooks/useAuth';
 import { soles } from './services/dinero';
 import { NavDrawer } from './components/NavDrawer';
 import { VistaBloqueada } from './components/VistaBloqueada';
@@ -29,56 +36,58 @@ import { CuentasView } from './components/CuentasView';
 import { HistorialView } from './components/HistorialView';
 import { ConfiguracionView } from './components/ConfiguracionView';
 import { ModalTransaccion } from './components/ModalTransaccion';
+import { LoginScreen } from './components/LoginScreen';
 
-// Vistas bloqueadas hasta su fase (el candado se retira fase a fase)
+// Vistas bloqueadas hasta su fase (F1 fue ACCESO: login Google +
+// nube; los módulos de dinero corren una fase — mismo ritmo FitTrack)
 const VISTAS_FUTURAS: Partial<Record<VistaApp, { fase: string; nombre: string; descripcion: string; novedades: string[] }>> = {
   sobres: {
-    fase: 'F1', nombre: 'Sobres de Dinero',
+    fase: 'F2', nombre: 'Sobres de Dinero',
     descripcion: 'El método de sobres del WalletTrack original, con recargar, gastar e historial por sobre.',
     novedades: ['Sobres con emoji, color y saldo propio', 'Recargar y gastar desde cada sobre', 'Historial de movimientos por sobre'],
   },
   deudas: {
-    fase: 'F1', nombre: 'Deudas y Apartados',
+    fase: 'F2', nombre: 'Deudas y Apartados',
     descripcion: 'Deudas con abonos, historial de pagos y dinero apartado (apartar / pagar / ver de qué cuenta sale).',
     novedades: ['Registrar deudas con monto y abonos', 'Pestañas pagar / historial / apartar', 'Alertas de deuda pendiente'],
   },
   presupuestos: {
-    fase: 'F1', nombre: 'Presupuestos',
+    fase: 'F2', nombre: 'Presupuestos',
     descripcion: 'Límite por categoría con barra de avance y alertas cuando te acercás al tope.',
     novedades: ['Presupuestos por categoría con color', 'Barra de avance del mes en curso', 'Alertas al 80% y 100% del límite'],
   },
   metas: {
-    fase: 'F1', nombre: 'Metas de Ahorro',
+    fase: 'F2', nombre: 'Metas de Ahorro',
     descripcion: 'Metas con monto objetivo, aportes y progreso — con abonos que quedan en el historial.',
     novedades: ['Metas con objetivo y fecha', 'Botón de aporte rápido', 'Progreso y restante en vivo'],
   },
   compras: {
-    fase: 'F2', nombre: 'Lista de Compras',
+    fase: 'F3', nombre: 'Lista de Compras',
     descripcion: 'Lista de compras con biblioteca de productos, precios y comparación en tienda.',
     novedades: ['Biblioteca de productos con precio', 'Tachar al meter al carrito', 'Historial de compras completadas'],
   },
   suscripciones: {
-    fase: 'F2', nombre: 'Suscripciones',
+    fase: 'F3', nombre: 'Suscripciones',
     descripcion: 'Suscripciones con costo y próxima fecha de pago.',
     novedades: ['Netflix, Spotify y más con costo mensual', 'Próximo pago destacado', 'Total fijo mensual'],
   },
   calendario: {
-    fase: 'F2', nombre: 'Calendario de Pagos',
+    fase: 'F3', nombre: 'Calendario de Pagos',
     descripcion: 'Calendario mensual con pagos recurrentes y vencimientos.',
     novedades: ['Vista mensual con marcadores', 'Gastos fijos programados', 'Recordatorios de vencimiento'],
   },
   retos: {
-    fase: 'F2', nombre: 'Retos Financieros',
+    fase: 'F3', nombre: 'Retos Financieros',
     descripcion: 'Retos de ahorro con progreso y logros desbloqueados.',
     novedades: ['Retos activos con progreso', 'Logros desbloqueados', 'Rachas de días sin gastos hormiga'],
   },
   estadisticas: {
-    fase: 'F2', nombre: 'Estadísticas',
+    fase: 'F3', nombre: 'Estadísticas',
     descripcion: 'Gráficas de distribución, evolución del balance y ahorro mensual.',
     novedades: ['Dona de gastos por categoría', 'Evolución del patrimonio', 'Export Excel y PDF profesional'],
   },
   walletbot: {
-    fase: 'F3', nombre: 'WalletBot · Robot de Finanzas',
+    fase: 'F4', nombre: 'WalletBot · Robot de Finanzas',
     descripcion: 'El robot IA del WalletTrack junto a tus otros robots: analiza tu mes y aconseja con tus datos reales.',
     novedades: ['Análisis automático del mes', 'Consejos anti-gasto hormiga', 'Chat con contexto de tus finanzas'],
   },
@@ -97,6 +106,8 @@ const TITULOS: Partial<Record<VistaApp, string>> = {
 };
 
 export default function App() {
+  const { usuario, cuenta, cargando } = useAuth();
+  const [modoLocal, setModoLocal] = useState<boolean>(() => esModoLocal());
   const [vista, setVista] = useState<VistaApp>('dashboard');
   const [estado, setEstado] = useState<EstadoWallet>(() => leerEstado());
   const [drawerAbierto, setDrawerAbierto] = useState(false);
@@ -106,6 +117,36 @@ export default function App() {
   const [modalTipo, setModalTipo] = useState<'income' | 'expense'>('expense');
   const [modalAbierto, setModalAbierto] = useState(false);
   const [sugerida, setSugerida] = useState<{ cuenta?: string; categoria?: string; monto?: number; descripcion?: string } | undefined>(undefined);
+
+  // F1: sync en la nube — con sesión baja+combina+sube al entrar,
+  // cada 5 min, al volver al frente y 8 s tras cada cambio local.
+  // En modo local (sin cuenta) no hay nube: 100 % offline.
+  useEffect(() => {
+    const pararSync = initSync({
+      uid: modoLocal ? null : (usuario?.uid ?? null),
+      alCambiarEstadoRemoto: () => setEstado(leerEstado()),
+    });
+    return pararSync;
+  }, [usuario?.uid, modoLocal]);
+
+  // F1: salir — cierra sesión Firebase (y Google nativo en APK) o
+  // vuelve del modo local; siempre regresa al LoginScreen.
+  const salir = async () => {
+    if (modoLocal) {
+      marcarModoLocal(false);
+      setModoLocal(false);
+      setVista('dashboard');
+      return;
+    }
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+        try { await GoogleAuth.signOut(); } catch { /* ya estaba fuera */ }
+      }
+    } catch { /* plugin no disponible en web */ }
+    await cerrarSesion();
+    setVista('dashboard');
+  };
 
   // Toast auto-ocultable
   const timerToast = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -160,14 +201,42 @@ export default function App() {
   const infoFutura = VISTAS_FUTURAS[vista];
   const tituloVista = TITULOS[vista] ?? infoFutura?.nombre ?? '';
 
+  // ── Cargando: mini splash ──
+  if (cargando) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
+        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
+          <Wallet className="w-8 h-8 text-white" />
+        </div>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F1</p>
+      </div>
+    );
+  }
+
+  // ── Sin sesión (y sin modo local): login Google ──
+  if (!usuario && !modoLocal) {
+    return (
+      <LoginScreen
+        onEntrarLocal={() => {
+          marcarModoLocal(true);
+          setModoLocal(true);
+          setVista('dashboard');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 custom-scrollbar">
       {/* ☰ Menú hamburguesa — TODAS las opciones agrupadas */}
       <NavDrawer
         abierto={drawerAbierto}
         vista={vista}
+        cuenta={cuenta}
+        modoLocal={modoLocal}
         onCerrar={() => setDrawerAbierto(false)}
         onIr={(v) => setVista(v)}
+        onSalir={salir}
       />
 
       {/* Header */}
@@ -187,14 +256,14 @@ export default function App() {
           <div className="min-w-0">
             <h1 className="text-base font-black text-white leading-tight">WalletTrack V2</h1>
             <p className="text-[11px] text-slate-400 leading-tight truncate">
-              {tituloVista} · {nombrePlataforma()}
+              {tituloVista} · {modoLocal ? 'Modo local' : (cuenta?.nombre?.split(' ')[0] || nombrePlataforma())}
             </p>
           </div>
           <span
-            data-testid="badge-fase-0"
+            data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F0 · BASE
+            F1 · ACCESO
           </span>
           <button
             onClick={() => setVista('config')}
@@ -244,12 +313,15 @@ export default function App() {
         {vista === 'config' && (
           <ConfiguracionView
             estado={estado}
+            cuenta={cuenta}
+            modoLocal={modoLocal}
             onImportar={importar}
+            onIniciarSesion={() => { marcarModoLocal(false); setModoLocal(false); }}
             onToast={mostrarToast}
           />
         )}
 
-        {/* Vistas F1-F3: candado + qué traerán */}
+        {/* Vistas F2+: candado + qué traerán */}
         {infoFutura && (
           <VistaBloqueada
             nombre={infoFutura.nombre}
