@@ -7,11 +7,11 @@
 // ═══════════════════════════════════════════════════════════
 
 import type {
-  CompraHistorial, Deuda, DeudaMov, EstadoWallet, GastoRapido, ItemCompra, Meta,
-  Presupuesto, ProductoBiblioteca, RespaldoWallet, Reto, Sobre, SobreMov,
+  Categoria, CompraHistorial, Cuenta, Deuda, DeudaMov, EstadoWallet, GastoRapido, ItemCompra, Meta,
+  Presupuesto, ProductoBiblioteca, Recurrente, RespaldoWallet, Reto, Sobre, SobreMov,
   Suscripcion, Transaccion,
 } from '../types';
-import { CUENTAS_CATALOG, CATS_GASTO_DEFAULT, GASTOS_RAPIDOS_DEFAULT } from '../data/catalogos';
+import { CUENTAS_CATALOG, CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT, GASTOS_RAPIDOS_DEFAULT, todasLasCuentas, nombreCuenta } from '../data/catalogos';
 import { hoyISO, mesActualISO, esDelMes } from './dinero';
 
 // ── Claves del viejo (NO cambiar: compatibilidad de datos) ────
@@ -35,6 +35,9 @@ const K = {
   comprasHist:   'wallettrack_compras_hist',
   gastosRapidos: 'wallettrack_gastos_rapidos',
   security:      'wallettrack_security',
+  // F5 · claves nuevas (no existen en el viejo — no chocan)
+  cuentasCustom: 'wallettrack_cuentas_custom',
+  recurrentes:   'wallettrack_recurrentes',
 } as const;
 
 /** F1: expuestas para el sync en la nube (wallettrack_sync) */
@@ -95,6 +98,8 @@ export function leerEstado(): EstadoWallet {
     listaCompras:   leerJSON<EstadoWallet['listaCompras']>(K.listaCompras, { items: [], creada: null }),
     comprasHist:    leerJSON<EstadoWallet['comprasHist']>(K.comprasHist, []),
     gastosRapidos:  gastosRapidosCrudos ?? [...GASTOS_RAPIDOS_DEFAULT],
+    cuentasCustom:  leerJSON<EstadoWallet['cuentasCustom']>(K.cuentasCustom, []),
+    recurrentes:    leerJSON<EstadoWallet['recurrentes']>(K.recurrentes, []),
   };
 }
 
@@ -117,6 +122,8 @@ export function persistir(estado: EstadoWallet): void {
   guardarJSON(K.listaCompras,  estado.listaCompras);
   guardarJSON(K.comprasHist,   estado.comprasHist);
   guardarJSON(K.gastosRapidos, estado.gastosRapidos);
+  guardarJSON(K.cuentasCustom, estado.cuentasCustom);
+  guardarJSON(K.recurrentes,   estado.recurrentes);
   notificarOyentes(estado); // F1: avisa al sync (debounce 8 s)
 }
 
@@ -142,9 +149,11 @@ export function persistirSilencioso(estado: EstadoWallet): void {
   guardarJSON(K.listaCompras,  estado.listaCompras);
   guardarJSON(K.comprasHist,   estado.comprasHist);
   guardarJSON(K.gastosRapidos, estado.gastosRapidos);
+  guardarJSON(K.cuentasCustom, estado.cuentasCustom);
+  guardarJSON(K.recurrentes,   estado.recurrentes);
 }
 
-// ── Transacciones ─────────────────────────────────────────────
+// ── Transacciones ─────────────────────────────────
 export interface DatosTransaccion {
   type: 'income' | 'expense';
   monto: number;
@@ -224,8 +233,8 @@ export function hacerTransferencia(
   if (!from || !to) return { estado, ok: false, error: 'Elige las dos cuentas' };
   if (from === to)  return { estado, ok: false, error: 'Las cuentas deben ser distintas' };
   if (!(monto > 0)) return { estado, ok: false, error: 'Monto inválido' };
-  const fromNombre = CUENTAS_CATALOG.find((c) => c.id === from)?.name ?? from;
-  const toNombre = CUENTAS_CATALOG.find((c) => c.id === to)?.name ?? to;
+  const fromNombre = nombreCuenta(estado, from);
+  const toNombre = nombreCuenta(estado, to);
   const hoy = hoyISO();
   // Ids anti-colisión: el segundo se valida contra la lista + el primero
   const idSalida = idUnico(estado.transactions);
@@ -1038,6 +1047,178 @@ export function repetirUltimaCompra(estado: EstadoWallet): EstadoWallet {
   return { ...estado, listaCompras: { ...estado.listaCompras, items } };
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🎨 F5 · CATEGORÍAS PROPIAS — activa las claves reservadas del
+// viejo (wallettrack_cat_gasto / _ingreso): se suman a los
+// defaults en TODOS los selects (modal, presupuestos, historial).
+// ═══════════════════════════════════════════════════════════
+
+export function crearCategoria(
+  estado: EstadoWallet, flujo: 'gasto' | 'ingreso', nombre: string, emoji: string,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  const limpio = nombre.trim();
+  if (limpio.length < 2) return { estado, ok: false, error: 'Ponle al menos 2 letras' };
+  if (limpio.length > 24) return { estado, ok: false, error: 'Nombre muy largo (máx 24)' };
+  const existentes = flujo === 'gasto'
+    ? [...CATS_GASTO_DEFAULT, ...estado.categoriasGasto]
+    : [...CATS_INGRESO_DEFAULT, ...estado.categoriasIngreso];
+  if (existentes.some((c) => c.nombre.toLowerCase() === limpio.toLowerCase())) {
+    return { estado, ok: false, error: `"${limpio}" ya existe` };
+  }
+  const cat: Categoria = { id: `cat_${Date.now()}`, emoji: emoji || '📦', nombre: limpio };
+  return flujo === 'gasto'
+    ? { estado: { ...estado, categoriasGasto: [...estado.categoriasGasto, cat] }, ok: true }
+    : { estado: { ...estado, categoriasIngreso: [...estado.categoriasIngreso, cat] }, ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🏦 F5 · CUENTAS PROPIAS — se agregan al catálogo en toda la
+// app (id 'cc_*' → viajan en sync y respaldo, no chocan nunca
+// con las 6 de fábrica).
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosCuentaCustom {
+  nombre: string;
+  emoji: string;
+  color: string;
+  tipo: 'banco' | 'billetera' | 'efectivo';
+}
+
+export function crearCuentaCustom(
+  estado: EstadoWallet, datos: DatosCuentaCustom,
+): { estado: EstadoWallet; ok: boolean; error?: string; id?: string } {
+  const limpio = datos.nombre.trim();
+  if (limpio.length < 2) return { estado, ok: false, error: 'Ponle al menos 2 letras' };
+  if (todasLasCuentas(estado).some((c) => c.name.toLowerCase() === limpio.toLowerCase())) {
+    return { estado, ok: false, error: `Ya tienes la cuenta "${limpio}"` };
+  }
+  const cuenta: Cuenta = {
+    id: `cc_${Date.now()}`,
+    name: limpio,
+    icon: datos.emoji || '💳',
+    color: datos.color || '#64748b',
+    tipo: datos.tipo || 'billetera',
+  };
+  return { estado: { ...estado, cuentasCustom: [...estado.cuentasCustom, cuenta] }, ok: true, id: cuenta.id };
+}
+
+/** Quita la cuenta propia (los movimientos quedan en el historial; el saldo deja de contar) */
+export function eliminarCuentaCustom(estado: EstadoWallet, id: string): EstadoWallet {
+  const saldos = { ...estado.saldosIniciales };
+  delete saldos[id];
+  return { ...estado, cuentasCustom: estado.cuentasCustom.filter((c) => c.id !== id), saldosIniciales: saldos };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🔁 F5 · RECURRENTES — sueldo semanal, alquiler, etc.: la app
+// los registra SOLA (catch-up al abrir) con ids deterministas
+// `autorec_{recId}_{fecha}` → jamás se duplican ni acá ni tras
+// el merge del sync (unirPorId los deduplica entre teléfonos).
+// ═══════════════════════════════════════════════════════════
+
+export interface DatosRecurrente {
+  nombre: string;
+  monto: number;
+  tipo: 'income' | 'expense';
+  categoria: string;
+  cuenta: string;
+  frecuencia: Recurrente['frecuencia'];
+  inicio: string;
+}
+
+export function crearRecurrente(
+  estado: EstadoWallet, datos: DatosRecurrente,
+): { estado: EstadoWallet; ok: boolean; error?: string } {
+  if (!datos.nombre.trim()) return { estado, ok: false, error: 'Ingresa el nombre (ej: Sueldo RiderTrack)' };
+  if (!(datos.monto > 0)) return { estado, ok: false, error: 'Ingresa un monto válido' };
+  if (!datos.categoria) return { estado, ok: false, error: 'Elige una categoría' };
+  if (!datos.inicio) return { estado, ok: false, error: 'Elige la fecha de inicio' };
+  const rec: Recurrente = {
+    id: idConPrefijo('rec', estado.recurrentes),
+    nombre: datos.nombre.trim(),
+    monto: datos.monto,
+    tipo: datos.tipo,
+    categoria: datos.categoria,
+    cuenta: datos.cuenta || 'efectivo',
+    frecuencia: datos.frecuencia || 'semanal',
+    inicio: datos.inicio,
+    ultimaAplicacion: null,
+    activo: true,
+  };
+  return { estado: { ...estado, recurrentes: [...estado.recurrentes, rec] }, ok: true };
+}
+
+export function eliminarRecurrente(estado: EstadoWallet, id: string): EstadoWallet {
+  return { ...estado, recurrentes: estado.recurrentes.filter((r) => r.id !== id) };
+}
+
+export function toggleRecurrente(estado: EstadoWallet, id: string): EstadoWallet {
+  return { ...estado, recurrentes: estado.recurrentes.map((r) => r.id === id ? { ...r, activo: !r.activo } : r) };
+}
+
+/** Próxima fecha de un recurrente a partir de la última aplicada (o su inicio) */
+export function siguienteOcurrenciaISO(rec: Recurrente, desdeISO: string): string {
+  const d = new Date(`${desdeISO}T00:00:00`);
+  if (rec.frecuencia === 'mensual') {
+    const diaOriginal = d.getDate();
+    d.setMonth(d.getMonth() + 1);
+    // fin de mes: 31→feb rueda a marzo → se clampea al último día del mes objetivo
+    if (d.getDate() < diaOriginal) d.setDate(0);
+  } else if (rec.frecuencia === 'quincenal') {
+    d.setDate(d.getDate() + 15);
+  } else {
+    d.setDate(d.getDate() + 7);
+  }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Fecha de la PRÓXIMA ocurrencia pendiente (para mostrar en la tarjeta) */
+export function proximaFechaRecurrente(rec: Recurrente): string {
+  const base = rec.ultimaAplicacion ?? null;
+  return base ? siguienteOcurrenciaISO(rec, base) : rec.inicio;
+}
+
+export interface ResultadoRecurrentes {
+  estado: EstadoWallet;
+  nuevas: Transaccion[];   // las que se registraron ahora (para el toast)
+}
+
+/**
+ * Registra TODAS las ocurrencias vencidas de los recurrentes
+ * activos (catch-up): desde la última aplicada (o inicio) hasta
+ * hoy. Ids deterministas → llamarlo mil veces no duplica nada.
+ */
+export function aplicarRecurrentesPendientes(estado: EstadoWallet): ResultadoRecurrentes {
+  const hoy = hoyISO();
+  let transactions = estado.transactions;
+  const recurrentes: Recurrente[] = [];
+  const nuevas: Transaccion[] = [];
+  for (const rec of estado.recurrentes) {
+    let r: Recurrente = { ...rec };
+    if (r.activo) {
+      let fecha: string = r.ultimaAplicacion ? siguienteOcurrenciaISO(r, r.ultimaAplicacion) : r.inicio;
+      let guardas = 0; // tope anti-bucle (300 semanas ≈ 5.7 años de catch-up)
+      while (fecha <= hoy && guardas < 300) {
+        const id = `autorec_${r.id}_${fecha}`;
+        if (!transactions.some((t) => t.id === id)) {
+          const t: Transaccion = {
+            id, date: fecha, type: r.tipo, category: r.categoria,
+            amount: r.monto, description: `🔁 ${r.nombre} (programado)`, account: r.cuenta,
+          };
+          transactions = [t, ...transactions];
+          nuevas.push(t);
+        }
+        r = { ...r, ultimaAplicacion: fecha };
+        fecha = siguienteOcurrenciaISO(r, fecha);
+        guardas++;
+      }
+    }
+    recurrentes.push(r);
+  }
+  if (nuevas.length === 0) return { estado, nuevas };
+  return { estado: { ...estado, transactions, recurrentes }, nuevas };
+}
+
 // ── Saldos ────────────────────────────────────────────────────
 export function saldoCuenta(estado: EstadoWallet, accountId: string): number {
   const inicial = Number(estado.saldosIniciales[accountId] ?? 0) || 0;
@@ -1052,7 +1233,7 @@ export function saldoCuenta(estado: EstadoWallet, accountId: string): number {
 }
 
 export function saldoTotal(estado: EstadoWallet): number {
-  return CUENTAS_CATALOG.reduce((acc, c) => acc + saldoCuenta(estado, c.id), 0);
+  return todasLasCuentas(estado).reduce((acc, c) => acc + saldoCuenta(estado, c.id), 0);
 }
 
 export function movimientosDeCuenta(estado: EstadoWallet, accountId: string): Transaccion[] {
@@ -1127,6 +1308,8 @@ export function exportarRespaldo(estado: EstadoWallet): string {
     listaCompras: estado.listaCompras,
     comprasHist: estado.comprasHist,
     gastosRapidos: estado.gastosRapidos,
+    cuentasCustom: estado.cuentasCustom,
+    recurrentes:   estado.recurrentes,
   };
   return JSON.stringify(respaldo, null, 2);
 }
@@ -1156,6 +1339,8 @@ export function importarRespaldo(estado: EstadoWallet, textoJSON: string): { est
     if (data.listaCompras)      nuevo.listaCompras = data.listaCompras;
     if (data.comprasHist)       nuevo.comprasHist = data.comprasHist;
     if (data.gastosRapidos)     nuevo.gastosRapidos = data.gastosRapidos;
+    if (data.cuentasCustom)    nuevo.cuentasCustom = data.cuentasCustom;
+    if (data.recurrentes)      nuevo.recurrentes = data.recurrentes;
     return { estado: nuevo, ok: true };
   } catch {
     return { estado, ok: false, error: 'Archivo JSON inválido' };
@@ -1191,6 +1376,8 @@ export function resetTotal(): EstadoWallet {
     listaCompras: { items: [], creada: null },
     comprasHist: [],
     gastosRapidos: [...GASTOS_RAPIDOS_DEFAULT],
+    cuentasCustom: [],
+    recurrentes: [],
   };
   try {
     Object.values(K).forEach((clave) => {

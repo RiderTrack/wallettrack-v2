@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F4 · WalletBot + Theme Studio';
+  return 'F5 · Candado + Recordatorios';
 }

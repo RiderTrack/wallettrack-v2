@@ -9,7 +9,7 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, PlusCircle, MinusCircle, ArrowRight, Zap, Wallet, ArrowLeftRight, Bot } from 'lucide-react';
 import type { EstadoWallet, VistaApp } from '../types';
-import { CUENTAS_CATALOG } from '../data/catalogos';
+import { todasLasCuentas } from '../data/catalogos';
 import { soles, fechaCorta, nombreMesActual } from '../services/dinero';
 import { saldoCuenta, saldoTotal, resumenMes, movimientosDeCuenta } from '../services/estado';
 import { analizarWallet, COLOR_MAP } from '../services/walletbot';
@@ -25,7 +25,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
   const total = saldoTotal(estado);
   const { ingresos, gastos } = resumenMes(estado);
   const recientes = estado.transactions.slice(0, 8);
-  const cuenta = (id?: string) => CUENTAS_CATALOG.find((c) => c.id === (id ?? 'efectivo'));
+  const cuenta = (id?: string) => todasLasCuentas(estado).find((c) => c.id === (id ?? 'efectivo'));
   // F4: los 2 avisos más prioritarios del mes (mismo motor del bot)
   const avisosBot = analizarWallet(estado).slice(0, 2);
 
@@ -122,7 +122,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
           </button>
         </div>
         <div className="flex overflow-x-auto no-scrollbar gap-3 pb-1">
-          {CUENTAS_CATALOG.map((c) => {
+          {todasLasCuentas(estado).map((c) => {
             const saldo = saldoCuenta(estado, c.id);
             const nMovs = movimientosDeCuenta(estado, c.id).length;
             return (

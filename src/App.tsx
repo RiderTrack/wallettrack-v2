@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🚀 APP — WalletTrack V2 (F1 · ACCESO)
+// 🚀 APP — WalletTrack V2 (F5 · SEGURIDAD + CONVENIENCIA)
 // Arquitectura gemela de FitTrack V2:
 //   • Navegación por vista activa (activeView) — sin router
 //   • ☰ Menú hamburguesa (NavDrawer) con TODAS las secciones
@@ -7,13 +7,12 @@
 //   • Estado global en services/estado.ts (mismas claves del
 //     wallettrack original — un respaldo viejo importa directo)
 //   • F1: LoginScreen con Google REAL (Firebase) + modo local;
-//     con sesión, TODO se respalda en wallettrack_sync/{uid}
-//     (baja+combina+sube al entrar, cada 5 min, al volver al
-//     frente y 8 s tras cada cambio — debounce).
-//   • F2 DINERO + F3 ANÁLISIS + F4 WALLETBOT instaladas: con
-//     esto el roadmap está COMPLETO — el bot analiza tu mes y
-//     responde preguntas con tus datos reales (offline), y el
-//     Theme Studio (🎨 en el header) re-pinta toda la app.
+//     con sesión, TODO se respalda en wallettrack_sync/{uid}.
+//   • F2 DINERO + F3 ANÁLISIS + F4 WALLETBOT instaladas.
+//   • F5: 🔒 candado local (PIN + huella, se re-bloquea al ir al
+//     fondo), 🔔 recordatorios de vencimientos (APK), 🔁 sueldos
+//     y fijos programados con catch-up idempotente, categorías
+//     y cuentas propias, y 🩺 diagnóstico del sync en Ajustes.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -22,16 +21,18 @@ import {
   LayoutDashboard, Wallet, History, Settings, Menu, Palette,
 } from 'lucide-react';
 import type { EstadoWallet, TemaWallet, VistaApp } from './types';
-import { nombrePlataforma, versionApp } from './services/platform';
+import { nombrePlataforma, versionApp, esAPK } from './services/platform';
 import {
   leerEstado, persistir, agregarTransaccion, eliminarTransaccion,
   registrarGastoRapido, guardarSaldosIniciales, hacerTransferencia,
-  importarRespaldo, resetTotal,
+  importarRespaldo, resetTotal, aplicarRecurrentesPendientes, crearCategoria,
 } from './services/estado';
 import { cerrarSesion } from './services/firebase';
 import { initSync } from './services/sync';
 import { useAuth, esModoLocal, marcarModoLocal } from './hooks/useAuth';
 import { soles } from './services/dinero';
+import { pinActivo } from './services/seguridad';
+import { reprogramarRecordatorios } from './services/recordatorios';
 import { NavDrawer } from './components/NavDrawer';
 import { DashboardView } from './components/DashboardView';
 import { CuentasView } from './components/CuentasView';
@@ -52,6 +53,7 @@ import { WalletBotView } from './components/WalletBotView';
 import { ThemeStudioModal } from './components/ThemeStudioModal';
 import { FondoCanvas } from './components/FondoCanvas';
 import { leerTema } from './services/tema';
+import { BloqueoScreen } from './components/BloqueoScreen';
 
 // F4 instaló WalletBot: TODAS las vistas del roadmap están
 // activas — no queda ninguna bloqueada.
@@ -83,6 +85,10 @@ export default function App() {
   const [drawerAbierto, setDrawerAbierto] = useState(false);
   const [toast, setToast] = useState('');
 
+  // F5 · 🔒 Candado: al abrir con PIN → pantalla de bloqueo;
+  // al ir al fondo la app se vuelve a cerrar sola.
+  const [bloqueado, setBloqueado] = useState(false);
+
   // F4 · Theme Studio: tema vivo (para el canvas de fondo) +
   // apertura del modal desde el 🎨 del header o Ajustes.
   const [tema, setTemaApp] = useState<TemaWallet>(() => leerTema());
@@ -96,13 +102,64 @@ export default function App() {
   // F1: sync en la nube — con sesión baja+combina+sube al entrar,
   // cada 5 min, al volver al frente y 8 s tras cada cambio local.
   // En modo local (sin cuenta) no hay nube: 100 % offline.
+  // F5: tras aplicar datos de la nube también corre el catch-up
+  // de recurrentes (por si el otro teléfono no lo hizo aún).
   useEffect(() => {
     const pararSync = initSync({
       uid: modoLocal ? null : (usuario?.uid ?? null),
-      alCambiarEstadoRemoto: () => setEstado(leerEstado()),
+      alCambiarEstadoRemoto: () => {
+        const r = aplicarRecurrentesPendientes(leerEstado());
+        if (r.nuevas.length > 0) persistir(r.estado);
+        setEstado(r.estado);
+      },
     });
     return pararSync;
   }, [usuario?.uid, modoLocal]);
+
+  // F5 · 🔁 Catch-up de recurrentes: una sola vez por arranque
+  // de la app (ids deterministas → re-cargar no duplica nada).
+  const catchUpHecho = useRef(false);
+  useEffect(() => {
+    if (cargando || catchUpHecho.current) return;
+    if (!usuario && !modoLocal) return; // aún en login
+    catchUpHecho.current = true;
+    const r = aplicarRecurrentesPendientes(leerEstado());
+    if (r.nuevas.length > 0) {
+      persistir(r.estado);
+      setEstado(r.estado);
+      setToast(`🔁 ${r.nuevas.length} programado${r.nuevas.length === 1 ? '' : 's'} registrado${r.nuevas.length === 1 ? '' : 's'}`);
+      const t = setTimeout(() => setToast(''), 3200);
+      return () => clearTimeout(t);
+    }
+  }, [cargando, usuario, modoLocal]);
+
+  // F5 · 🔒 Re-bloqueo: al abrir la app (arranque) y al mandarla
+  // al fondo el candado vuelve a cerrarse — como las apps de banco.
+  useEffect(() => {
+    // Arranque con candado configurado → arranca bloqueada
+    if (pinActivo()) setBloqueado(true);
+    let limpiar: (() => void) | undefined;
+    const setup = async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+        const escucha = await App.addListener('appStateChange', ({ isActive }: { isActive: boolean }) => {
+          if (!isActive && pinActivo()) setBloqueado(true);
+        });
+        limpiar = () => { void escucha.remove(); };
+      } catch { /* web: sin ciclo de vida nativo */ }
+    };
+    void setup();
+    return () => limpiar?.();
+  }, []);
+
+  // F5 · 🔔 Recordatorios: se re-agenda solo cuando cambian los
+  // fijos o las deudas (crear/pagar/baja/sync) — cancela y vuelve
+  // a programar. En web no hace nada.
+  useEffect(() => {
+    if (!esAPK()) return;
+    void reprogramarRecordatorios(estado);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado.subscriptions, estado.deudas]);
 
   // F1: salir — cierra sesión Firebase (y Google nativo en APK) o
   // vuelve del modo local; siempre regresa al LoginScreen.
@@ -121,6 +178,7 @@ export default function App() {
     } catch { /* plugin no disponible en web */ }
     await cerrarSesion();
     setVista('dashboard');
+    setBloqueado(false);
   };
 
   // Toast auto-ocultable
@@ -166,6 +224,14 @@ export default function App() {
     return null;
   };
 
+  // F5 · categorías propias desde el modal de transacción
+  const crearCategoriaDesdeModal = (flujo: 'income' | 'expense', nombre: string, emoji: string): boolean => {
+    const r = crearCategoria(estado, flujo === 'income' ? 'ingreso' : 'gasto', nombre, emoji);
+    if (!r.ok) { mostrarToast(r.error ?? 'No se pudo crear'); return false; }
+    aplicar(r.estado);
+    return true;
+  };
+
   const importar = (textoJSON: string): boolean => {
     const { estado: nuevo, ok, error } = importarRespaldo(estado, textoJSON);
     if (!ok) { mostrarToast(error ?? 'Error al importar'); return false; }
@@ -183,7 +249,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F4</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F5</p>
       </div>
     );
   }
@@ -199,6 +265,11 @@ export default function App() {
         }}
       />
     );
+  }
+
+  // ── F5 · 🔒 Candado activo: NADA de la app se pinta detrás ──
+  if (bloqueado && pinActivo()) {
+    return <BloqueoScreen onDesbloquear={() => setBloqueado(false)} />;
   }
 
   return (
@@ -241,7 +312,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F4 · WALLETBOT
+            F5 · SEGURIDAD
           </span>
           <button
             onClick={() => setStudioAbierto(true)}
@@ -284,6 +355,7 @@ export default function App() {
             onGuardarSaldos={(saldos) => aplicar(guardarSaldosIniciales(estado, saldos))}
             onTransferencia={transferir}
             onReset={() => { setEstado(resetTotal()); mostrarToast('Todo reiniciado a cero'); }}
+            onAplicar={aplicar}
             onToast={mostrarToast}
           />
         )}
@@ -335,6 +407,7 @@ export default function App() {
           <HistorialView
             estado={estado}
             onEliminar={(id) => { aplicar(eliminarTransaccion(estado, id)); mostrarToast('Movimiento eliminado'); }}
+            onAplicar={aplicar}
             onToast={mostrarToast}
           />
         )}
@@ -384,6 +457,7 @@ export default function App() {
         sugerida={sugerida}
         onCerrar={() => setModalAbierto(false)}
         onGuardar={guardarTransaccion}
+        onCrearCategoria={crearCategoriaDesdeModal}
       />
 
       {/* F4 · Theme Studio (🎨 del header o botón de Ajustes) */}

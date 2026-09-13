@@ -19,7 +19,7 @@ import {
 } from '../services/estado';
 import type { DatosProducto, DatosPrecioItem, UnidadProducto } from '../services/estado';
 import { soles, parseMonto, fechaCorta } from '../services/dinero';
-import { CUENTAS_CATALOG } from '../data/catalogos';
+import { todasLasCuentas } from '../data/catalogos';
 
 const EMOJIS_PRODUCTO = ['📦', '🍎', '🥛', '🍞', '🐔', '🥩', '🍚', '🧻', '🧼', '☕', '🥑', '🍌'];
 const UNIDAD_DEFAULT: UnidadProducto = 'und';
@@ -366,7 +366,7 @@ export const ComprasView: React.FC<ComprasViewProps> = ({ estado, onAplicar, onT
           ) : (
             <div className="space-y-2.5" data-testid="compras-historial-lista">
               {estado.comprasHist.map((c) => {
-                const cuenta = CUENTAS_CATALOG.find((x) => x.id === c.cuenta);
+                const cuenta = todasLasCuentas(estado).find((x) => x.id === c.cuenta);
                 return (
                   <details key={c.id} className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden" data-testid={`hist-compra-${c.id}`}>
                     <summary className="flex items-center justify-between px-3.5 py-3 cursor-pointer list-none">
@@ -571,7 +571,7 @@ export const ComprasView: React.FC<ComprasViewProps> = ({ estado, onAplicar, onT
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Descontar de</label>
               <select value={cuentaCierre} onChange={(e) => setCuentaCierre(e.target.value)} data-testid="cerrar-compras-cuenta"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-100 text-sm outline-none focus:border-emerald-500/60">
-                {CUENTAS_CATALOG.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                {todasLasCuentas(estado).map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
               </select>
             </div>
 

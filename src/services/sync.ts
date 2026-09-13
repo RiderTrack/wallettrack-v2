@@ -154,6 +154,9 @@ export function combinarEstados(
     listaCompras: combinarListaCompras(local.listaCompras, remoto.listaCompras, remotoMasNuevo),
     comprasHist: unirPorId(local.comprasHist, remoto.comprasHist, remotoMasNuevo),
     gastosRapidos: unirPorId(local.gastosRapidos, remoto.gastosRapidos, remotoMasNuevo),
+    // F5 · nuevas listas (payloads F4 sin estos campos → undefined = lista vacía, sin riesgo)
+    cuentasCustom: unirPorId(local.cuentasCustom, remoto.cuentasCustom, remotoMasNuevo),
+    recurrentes: unirPorId(local.recurrentes, remoto.recurrentes, remotoMasNuevo),
   };
 }
 
@@ -197,12 +200,14 @@ export interface EstadoSyncUI {
   ultimaSubida: number | null;
   ultimaBajada: number | null;
   error: string | null;
+  codigoError?: string | null; // F5: código Firestore crudo (permission-denied, …)
 }
 
 let _uid: string | null = null;
 let _enVuelo = false;
 let _reintentar = false;
 let _error: string | null = null;
+let _codigoError: string | null = null;
 let _alCambiarRemoto: (() => void) | null = null;
 let _timerSubida: ReturnType<typeof setTimeout> | null = null;
 let _timerPeriodico: ReturnType<typeof setInterval> | null = null;
@@ -218,6 +223,7 @@ export function snapshotSync(): EstadoSyncUI {
     ultimaSubida: m.ultimaSubida > 0 ? m.ultimaSubida : null,
     ultimaBajada: m.ultimaBajada > 0 ? m.ultimaBajada : null,
     error: _error,
+    codigoError: _codigoError,
   };
 }
 
@@ -241,15 +247,28 @@ function mensajeError(e: unknown): string {
   const code = String((e as { code?: unknown })?.code ?? '');
   const msg = e instanceof Error ? e.message : String(e ?? '');
   if (code.includes('permission-denied')) {
-    return 'La nube rechazó la conexión — falta la regla wallettrack_sync en Firestore (paso 3 del LEEME)';
+    return `La nube rechazó la conexión (permission-denied): falta la regla de wallettrack_sync en Firestore — Ajustes → Sincronización → 🩺 Diagnosticar te da la regla exacta para pegar en Firebase Console`;
   }
-  if (code.includes('unavailable') || code.includes('failed-precondition') || /network|offline/i.test(msg)) {
+  if (code.includes('failed-precondition')) {
+    return 'Firestore no está inicializado en el proyecto (crea la base de datos en la Firebase Console — modo bloqueado basta)';
+  }
+  if (code.includes('unavailable') || /network|offline/i.test(msg)) {
     return 'Sin conexión con la nube — reintenta cuando haya internet';
   }
   if (e instanceof Error && e.message === 'peso') {
     return 'Tus datos pesan más de 1 MB — el respaldo JSON local los cubre';
   }
   return 'No se pudo conectar con la nube — reintenta más tarde';
+}
+
+/** F5: código Firestore crudo del último error (para el diagnóstico) */
+export function codigoUltimoError(): string | null {
+  return _codigoError;
+}
+
+function capturarError(e: unknown): string {
+  _codigoError = String((e as { code?: unknown })?.code ?? '') || null;
+  return mensajeError(e);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -263,6 +282,7 @@ export async function sincronizarAhora(): Promise<ResultadoSync> {
   if (_enVuelo) { _reintentar = true; return { ok: true }; }
   _enVuelo = true;
   _error = null;
+  _codigoError = null;
   emitir();
   try {
     if (!db) throw new Error('Firebase no disponible');
@@ -305,7 +325,7 @@ export async function sincronizarAhora(): Promise<ResultadoSync> {
     if (_timerSubida) { clearTimeout(_timerSubida); _timerSubida = null; }
     return { ok: true };
   } catch (e) {
-    _error = mensajeError(e);
+    _error = capturarError(e);
     return { ok: false, error: _error };
   } finally {
     _enVuelo = false;
@@ -333,6 +353,7 @@ export async function restaurarDesdeNube(): Promise<ResultadoSync> {
   if (!uid) return { ok: false, error: 'sin-sesion' };
   _enVuelo = true;
   _error = null;
+  _codigoError = null;
   emitir();
   try {
     if (!db) throw new Error('Firebase no disponible');
@@ -345,7 +366,7 @@ export async function restaurarDesdeNube(): Promise<ResultadoSync> {
     _alCambiarRemoto?.();
     return { ok: true };
   } catch (e) {
-    _error = mensajeError(e);
+    _error = capturarError(e);
     return { ok: false, error: _error };
   } finally {
     _enVuelo = false;
@@ -359,6 +380,7 @@ export async function subirTodoALaNube(): Promise<ResultadoSync> {
   if (!uid) return { ok: false, error: 'sin-sesion' };
   _enVuelo = true;
   _error = null;
+  _codigoError = null;
   emitir();
   try {
     if (!db) throw new Error('Firebase no disponible');
@@ -368,7 +390,7 @@ export async function subirTodoALaNube(): Promise<ResultadoSync> {
     guardarMeta({ modificado: payload.modificado, ultimaSubida: Date.now(), ultimaBajada: leerMeta().ultimaBajada });
     return { ok: true };
   } catch (e) {
-    _error = mensajeError(e);
+    _error = capturarError(e);
     return { ok: false, error: _error };
   } finally {
     _enVuelo = false;

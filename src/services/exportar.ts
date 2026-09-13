@@ -12,7 +12,7 @@
 
 import type { Border, Borders, Cell, Fill, Font, Row } from 'exceljs'; // solo tipos (se borran al compilar)
 import type { EstadoWallet } from '../types';
-import { CUENTAS_CATALOG } from '../data/catalogos';
+import { todasLasCuentas } from '../data/catalogos';
 import { gastosDelMesPorCategoria, resumenMeses, saldoTotal } from './estado';
 import { hoyISO, mesActualISO, nombreMesActual } from './dinero';
 import { compartirArchivo } from './archivo';
@@ -78,7 +78,7 @@ export async function exportarExcel(estado: EstadoWallet): Promise<void> {
 
   let ingrIdx = 0, gasIdx = 0;
   estado.transactions.forEach((t) => {
-    const cuenta = CUENTAS_CATALOG.find((c) => c.id === (t.account || 'efectivo'))?.name || t.account;
+    const cuenta = todasLasCuentas(estado).find((c) => c.id === (t.account || 'efectivo'))?.name || t.account;
     const esIngreso = t.type === 'income';
     const fila = ws1.addRow([
       t.date || '', esIngreso ? 'Ingreso' : 'Gasto', t.category || '', cuenta || '',
@@ -230,7 +230,7 @@ export async function exportarExcel(estado: EstadoWallet): Promise<void> {
   });
 
   let totalActual = 0;
-  CUENTAS_CATALOG.forEach((cuenta, ci) => {
+  todasLasCuentas(estado).forEach((cuenta, ci) => {
     const inicial = Number(estado.saldosIniciales[cuenta.id] || 0);
     let ing = 0, gas = 0;
     estado.transactions.forEach((t) => {
@@ -342,7 +342,7 @@ export async function exportarPDF(estado: EstadoWallet): Promise<void> {
       t.date || '',
       t.type === 'income' ? 'Ingreso' : 'Gasto',
       (t.category || '').substring(0, 24),
-      CUENTAS_CATALOG.find((c) => c.id === (t.account || 'efectivo'))?.name || (t.account || ''),
+      todasLasCuentas(estado).find((c) => c.id === (t.account || 'efectivo'))?.name || (t.account || ''),
       `S/${Number(t.amount).toFixed(2)}`,
       (t.description || '').substring(0, 30),
     ]);

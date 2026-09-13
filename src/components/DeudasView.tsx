@@ -15,7 +15,7 @@ import {
 } from '../services/estado';
 import type { DatosDeuda } from '../services/estado';
 import { soles, parseMonto, fechaCorta, hoyISO } from '../services/dinero';
-import { CUENTAS_CATALOG } from '../data/catalogos';
+import { todasLasCuentas } from '../data/catalogos';
 
 interface DeudasViewProps {
   estado: EstadoWallet;
@@ -181,7 +181,7 @@ export const DeudasView: React.FC<DeudasViewProps> = ({ estado, onAplicar, onToa
           {estado.deudas.map((d) => {
             const pendiente = montoPendienteDeuda(estado, d.id);
             const pct = d.totalCuotas > 0 ? Math.min(100, Math.round((d.cuotasPagadas / d.totalCuotas) * 100)) : 0;
-            const cuenta = CUENTAS_CATALOG.find((c) => c.id === d.cuenta);
+            const cuenta = todasLasCuentas(estado).find((c) => c.id === d.cuenta);
             return (
               <button
                 key={d.id}
@@ -276,7 +276,7 @@ export const DeudasView: React.FC<DeudasViewProps> = ({ estado, onAplicar, onToa
                   <label className="block text-xs font-bold text-slate-400 mb-1.5">Cuenta de pago</label>
                   <select value={nCuenta} onChange={(e) => setNCuenta(e.target.value)} data-testid="select-deuda-cuenta"
                     className="w-full bg-slate-950/70 border border-slate-700 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-rose-500/60">
-                    {CUENTAS_CATALOG.map((c) => (
+                    {todasLasCuentas(estado).map((c) => (
                       <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                     ))}
                   </select>
@@ -303,7 +303,7 @@ export const DeudasView: React.FC<DeudasViewProps> = ({ estado, onAplicar, onToa
         const necesita = Number(d.montoCuota) || 0;
         const ahorPct = necesita > 0 ? Math.min(100, Math.round((juntado / necesita) * 100)) : 0;
         const falta = Math.max(0, necesita - juntado);
-        const cuenta = CUENTAS_CATALOG.find((c) => c.id === d.cuenta);
+        const cuenta = todasLasCuentas(estado).find((c) => c.id === d.cuenta);
         const barColor = ahorPct >= 100 ? '#34d399' : ahorPct >= 60 ? '#fbbf24' : '#fb7185';
         return (
           <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">

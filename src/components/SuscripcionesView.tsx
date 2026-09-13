@@ -17,7 +17,7 @@ import {
 } from '../services/estado';
 import type { DatosSuscripcion } from '../services/estado';
 import { soles, parseMonto, fechaCorta } from '../services/dinero';
-import { CUENTAS_CATALOG } from '../data/catalogos';
+import { todasLasCuentas } from '../data/catalogos';
 
 const EMOJIS_FIJOS = ['🔄', '📺', '🎵', '🌐', '💡', '💧', '🏠', '📱', '🎮', '💪', '🚗', '📦'];
 
@@ -136,7 +136,7 @@ export const SuscripcionesView: React.FC<SuscripcionesViewProps> = ({ estado, on
             const vencido = dias < 0;
             const hoy = dias === 0;
             const proximo = dias >= 0 && dias <= 3;
-            const cuenta = CUENTAS_CATALOG.find((c) => c.id === (sub.cuenta || 'efectivo'));
+            const cuenta = todasLasCuentas(estado).find((c) => c.id === (sub.cuenta || 'efectivo'));
             const lbl = vencido ? '⚠️ Vencido' : hoy ? '🔴 Vence HOY' : proximo ? `⏰ En ${dias} día${dias !== 1 ? 's' : ''}` : `📅 En ${dias} días`;
             const col = vencido ? 'text-rose-400 bg-rose-500/15 border-rose-500/30' : hoy ? 'text-orange-400 bg-orange-500/15 border-orange-500/30' : proximo ? 'text-amber-400 bg-amber-500/10 border-amber-500/25' : 'text-slate-400 bg-white/5 border-white/10';
             const borde = vencido ? 'border-rose-500/40' : hoy ? 'border-orange-500/40' : proximo ? 'border-amber-500/30' : 'border-slate-700/80';
@@ -260,7 +260,7 @@ export const SuscripcionesView: React.FC<SuscripcionesViewProps> = ({ estado, on
                 data-testid="fijo-cuenta"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-100 text-sm outline-none focus:border-indigo-500/60"
               >
-                {CUENTAS_CATALOG.map((c) => (
+                {todasLasCuentas(estado).map((c) => (
                   <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                 ))}
               </select>

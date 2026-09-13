@@ -6,9 +6,9 @@
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from 'react';
-import { PlusCircle, MinusCircle, X } from 'lucide-react';
+import { PlusCircle, MinusCircle, X, Plus } from 'lucide-react';
 import type { EstadoWallet } from '../types';
-import { CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT, CUENTAS_CATALOG } from '../data/catalogos';
+import { CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT, todasLasCuentas, EMOJIS_NUEVA } from '../data/catalogos';
 import { hoyISO, parseMonto } from '../services/dinero';
 import type { DatosTransaccion } from '../services/estado';
 
@@ -20,15 +20,18 @@ interface ModalTransaccionProps {
   sugerida?: { cuenta?: string; categoria?: string; monto?: number; descripcion?: string };
   onCerrar: () => void;
   onGuardar: (datos: DatosTransaccion) => void;
+  /** F5: crea una categoría propia (la persiste y avisa al sync) */
+  onCrearCategoria?: (flujo: 'income' | 'expense', nombre: string, emoji: string) => boolean;
 }
 
 export const ModalTransaccion: React.FC<ModalTransaccionProps> = ({
-  abierto, tipo, estado, sugerida, onCerrar, onGuardar,
+  abierto, tipo, estado, sugerida, onCerrar, onGuardar, onCrearCategoria,
 }) => {
   const esIngreso = tipo === 'income';
   const cats = esIngreso
     ? [...CATS_INGRESO_DEFAULT, ...estado.categoriasIngreso]
     : [...CATS_GASTO_DEFAULT, ...estado.categoriasGasto];
+  const cuentas = todasLasCuentas(estado);
 
   const [montoTxt, setMontoTxt] = useState('');
   const [categoria, setCategoria] = useState(cats[0]?.nombre ?? 'Otros');
@@ -36,6 +39,12 @@ export const ModalTransaccion: React.FC<ModalTransaccionProps> = ({
   const [fecha, setFecha] = useState(hoyISO());
   const [desc, setDesc] = useState('');
   const [error, setError] = useState('');
+
+  // F5 · mini-form de categoría propia
+  const [creandoCat, setCreandoCat] = useState(false);
+  const [nuevoEmoji, setNuevoEmoji] = useState('🏷️');
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [errorCat, setErrorCat] = useState('');
 
   // Al abrir: reset + sugerencias (cuenta de la tarjeta, etc.)
   useEffect(() => {
@@ -46,6 +55,10 @@ export const ModalTransaccion: React.FC<ModalTransaccionProps> = ({
     setFecha(hoyISO());
     setDesc(sugerida?.descripcion ?? '');
     setError('');
+    setCreandoCat(false);
+    setNuevoNombre('');
+    setNuevoEmoji('🏷️');
+    setErrorCat('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, tipo, sugerida?.cuenta, sugerida?.categoria, sugerida?.monto]);
 
@@ -148,6 +161,68 @@ export const ModalTransaccion: React.FC<ModalTransaccionProps> = ({
                 <option key={c.id} value={c.nombre}>{c.emoji} {c.nombre}</option>
               ))}
             </select>
+
+            {/* F5 · crear categoría propia (se guarda para siempre y viaja a la nube) */}
+            {!creandoCat ? (
+              <button
+                onClick={() => { setCreandoCat(true); setErrorCat(''); }}
+                data-testid="boton-nueva-categoria"
+                className="mt-1.5 text-[11px] font-bold text-emerald-400/90 hover:text-emerald-300 flex items-center gap-1 transition-all"
+              >
+                <Plus className="w-3 h-3" /> Nueva categoría
+              </button>
+            ) : (
+              <div className="mt-1.5 rounded-xl bg-slate-950/70 border border-emerald-500/30 p-2.5 space-y-2" data-testid="form-nueva-categoria">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={nuevoNombre}
+                    onChange={(e) => { setNuevoNombre(e.target.value); setErrorCat(''); }}
+                    placeholder="Nombre (ej: Delivery)"
+                    maxLength={24}
+                    data-testid="input-nueva-cat-nombre"
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!onCrearCategoria) return;
+                      const ok = onCrearCategoria(tipo, nuevoNombre, nuevoEmoji);
+                      if (ok) {
+                        setCategoria(nuevoNombre.trim());
+                        setCreandoCat(false);
+                        setNuevoNombre('');
+                      } else {
+                        setErrorCat('No se pudo crear (¿ya existe?)');
+                      }
+                    }}
+                    data-testid="boton-guardar-categoria"
+                    className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
+                  >
+                    Crear
+                  </button>
+                  <button
+                    onClick={() => setCreandoCat(false)}
+                    className="px-2.5 py-2 rounded-lg border border-slate-600 text-slate-400 text-xs font-bold"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex gap-1 flex-wrap">
+                  {EMOJIS_NUEVA.slice(0, 12).map((e) => (
+                    <button
+                      key={e}
+                      onClick={() => setNuevoEmoji(e)}
+                      className={`w-7 h-7 rounded-lg text-sm leading-none flex items-center justify-center border transition-all ${
+                        nuevoEmoji === e ? 'border-emerald-500 bg-emerald-500/15' : 'border-slate-700 hover:border-slate-500'
+                      }`}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+                {errorCat && <p className="text-[10px] font-bold text-rose-400">{errorCat}</p>}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -159,7 +234,7 @@ export const ModalTransaccion: React.FC<ModalTransaccionProps> = ({
                 data-testid="select-cuenta"
                 className="w-full bg-slate-950/70 border border-slate-700 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
               >
-                {CUENTAS_CATALOG.map((c) => (
+                {cuentas.map((c) => (
                   <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                 ))}
               </select>

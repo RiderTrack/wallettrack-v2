@@ -1,17 +1,21 @@
 // ═══════════════════════════════════════════════════════════
-// ⚙️ CONFIGURACIÓN — WalletTrack V2 (F1)
+// ⚙️ CONFIGURACIÓN — WalletTrack V2 (F5)
 // F1: cuenta Google + sincronización en la nube (wallettrack_sync)
 // con estado en vivo, Sincronizar ahora, Restaurar y Subir todo.
-// Además: respaldo JSON (mismo formato v3.0 del viejo →
-// intercambiable con el HTML original), import de backups del
-// viejo Wallet, info de versión/plataforma y roadmap de fases.
+// F5: 🩺 Diagnóstico del sync (detecta la causa exacta cuando
+// "no sincroniza" y da la regla de Firestore para copiar),
+// 🔒 Candado local (PIN + huella) y 🔔 Recordatorios de
+// vencimientos. Además: respaldo JSON v3.0, import de backups
+// del viejo Wallet, info de versión y hoja de ruta.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Download, Upload, Wallet, Smartphone, Map, CheckCircle2, AlertTriangle,
   Cloud, CloudDownload, CloudUpload, RefreshCw, LogIn, Loader2, Palette,
+  Lock, Fingerprint, Bell, Stethoscope, Copy, XCircle, Plus,
 } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
 import type { EstadoWallet } from '../types';
 import { esAPK, nombrePlataforma, versionApp } from '../services/platform';
 import { exportarRespaldo, importarRespaldo } from '../services/estado';
@@ -19,6 +23,14 @@ import {
   sincronizarAhora, restaurarDesdeNube, subirTodoALaNube,
   suscribirSync, type EstadoSyncUI,
 } from '../services/sync';
+import { db, auth } from '../services/firebase';
+import {
+  activarPin, cambiarPin, quitarPin, pinActivo, leerSeguridad,
+  alternarHuella, huellaDisponible,
+} from '../services/seguridad';
+import {
+  recordatoriosActivos, alternarRecordatorios, probarNotificacion,
+} from '../services/recordatorios';
 import { compartirArchivo, nombreRespaldo } from '../services/archivo';
 import { leerTema } from '../services/tema';
 import type { CuentaUsuario } from '../hooks/useAuth';
@@ -67,6 +79,142 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
     if (r.ok) onToast('Sincronizado con la nube ✓');
     else if (r.error === 'sin-sesion') onToast('Iniciá sesión con tu cuenta Google para sincronizar');
     else onToast(r.error ?? 'No se pudo sincronizar');
+  };
+
+  // ── F5 · 🩺 Diagnóstico del sync ──
+  interface PasoDiag { paso: string; ok: boolean; detalle: string; }
+  const [diagnostico, setDiagnostico] = useState<PasoDiag[] | null>(null);
+  const [diagCorriendo, setDiagCorriendo] = useState(false);
+  const [reglasCopiadas, setReglasCopiadas] = useState(false);
+
+  const REGLA_FIRESTORE = `match /wallettrack_sync/{uid} {
+  allow read, write: if request.auth != null && request.auth.uid == uid;
+}`;
+
+  const diagnosticar = async () => {
+    if (diagCorriendo) return;
+    setDiagCorriendo(true);
+    setDiagnostico(null);
+    const pasos: PasoDiag[] = [];
+
+    // 1 · Sesión
+    const u = auth?.currentUser;
+    pasos.push({
+      paso: 'Sesión Google',
+      ok: !!u,
+      detalle: u ? `${u.email || 'cuenta'} · uid ${String(u.uid).slice(0, 8)}…` : 'Sin sesión (modo local) — el sync necesita cuenta',
+    });
+
+    // 2 · Red
+    pasos.push({
+      paso: 'Conexión a internet',
+      ok: navigator.onLine,
+      detalle: navigator.onLine ? 'en línea ✓' : 'sin red — reconectate y reintenta',
+    });
+
+    // 3 · Firebase inicializado
+    pasos.push({
+      paso: 'Firebase iniciado',
+      ok: !!db,
+      detalle: db ? 'proyecto fittrack-e06be conectado' : 'Firebase no arrancó (reinstalá la app)',
+    });
+
+    // 4 · Lectura del documento privado
+    if (u && db) {
+      try {
+        const snap = await getDoc(doc(db, 'wallettrack_sync', u.uid));
+        pasos.push({
+          paso: 'Lectura de wallettrack_sync',
+          ok: true,
+          detalle: snap.exists() ? 'tu documento existe en la nube ✓' : 'todavía vacío (se crea al sincronizar) — normal la primera vez',
+        });
+      } catch (e) {
+        const code = String((e as { code?: unknown })?.code ?? '');
+        pasos.push({
+          paso: 'Lectura de wallettrack_sync',
+          ok: false,
+          detalle: code.includes('permission-denied')
+            ? '❌ permission-denied — FALTA LA REGLA en Firestore (está abajo para copiar)'
+            : `❌ ${code || 'error de lectura'} — revisá tu conexión`,
+        });
+      }
+    }
+
+    // 5 · Ronda completa (el motor real: baja + combina + sube)
+    const r = await sincronizarAhora();
+    pasos.push({
+      paso: 'Sincronización completa',
+      ok: r.ok,
+      detalle: r.ok
+        ? '✓ bajó, combinó y subió — todo en orden'
+        : (r.error === 'sin-sesion' ? 'sin sesión' : (r.error ?? 'falló')),
+    });
+
+    setDiagnostico(pasos);
+    setDiagCorriendo(false);
+  };
+
+  const copiarRegla = async () => {
+    try {
+      await navigator.clipboard.writeText(REGLA_FIRESTORE);
+      setReglasCopiadas(true);
+      setTimeout(() => setReglasCopiadas(false), 2200);
+      onToast('Regla copiada — pégala en Firebase Console → Firestore → Reglas');
+    } catch {
+      onToast('No pude copiar — copiala a mano del cuadro');
+    }
+  };
+
+  // ── F5 · 🔒 Candado (PIN + huella) ──
+  const [candadoTrabajando, setCandadoTrabajando] = useState(false);
+  const [pinViejo, setPinViejo] = useState('');
+  const [pinNuevo, setPinNuevo] = useState('');
+  const [pinConfirma, setPinConfirma] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [modoPin, setModoPin] = useState<'crear' | 'cambiar' | 'quitar' | null>(null);
+  const [huellaEstado, setHuellaEstado] = useState<{ ok: boolean; detalle: string } | null>(null);
+  const [huellaOn, setHuellaOn] = useState(leerSeguridad().huella);
+
+  useEffect(() => {
+    void huellaDisponible().then(setHuellaEstado);
+  }, []);
+
+  const guardarPin = () => {
+    setCandadoTrabajando(true);
+    try {
+      if (modoPin === 'crear') {
+        if (pinNuevo !== pinConfirma) { setPinError('Los dos PIN no coinciden'); return; }
+        const r = activarPin(pinNuevo);
+        if (!r.ok) { setPinError(r.error ?? 'PIN inválido'); return; }
+        onToast('🔒 Candado activado — la app se bloquea al cerrarse');
+      } else if (modoPin === 'cambiar') {
+        if (pinNuevo !== pinConfirma) { setPinError('Los dos PIN no coinciden'); return; }
+        const r = cambiarPin(pinViejo, pinNuevo);
+        if (!r.ok) { setPinError(r.error ?? 'No se pudo cambiar'); return; }
+        onToast('PIN cambiado ✓');
+      } else if (modoPin === 'quitar') {
+        const r = quitarPin(pinViejo);
+        if (!r.ok) { setPinError(r.error ?? 'No se pudo quitar'); return; }
+        onToast('Candado quitado');
+      }
+      setModoPin(null); setPinViejo(''); setPinNuevo(''); setPinConfirma(''); setPinError('');
+    } finally {
+      setCandadoTrabajando(false);
+    }
+  };
+
+  // ── F5 · 🔔 Recordatorios ──
+  const [recordatoriosOn, setRecordatoriosOn] = useState(recordatoriosActivos());
+  const alternarAvisos = () => {
+    const nuevo = !recordatoriosOn;
+    alternarRecordatorios(nuevo);
+    setRecordatoriosOn(nuevo);
+    onToast(nuevo ? '🔔 Recordatorios activados' : 'Recordatorios apagados');
+  };
+
+  const probar = async () => {
+    const ok = await probarNotificacion();
+    onToast(ok ? '🔔 Sale en 6 segundos…' : 'El equipo no permitió las notificaciones');
   };
 
   const confirmarRestaurar = async () => {
@@ -250,6 +398,7 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
                 <CloudUpload className="w-3.5 h-3.5" /> Subir todo
               </button>
             </div>
+
           </>
         ) : (
           <>
@@ -267,6 +416,266 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
             </button>
           </>
         )}
+
+        {/* F5 · 🩺 Diagnóstico: la causa exacta de "no me sincroniza" —
+            también en modo local (te dice que falta iniciar sesión) */}          {/* F5 · 🩺 Diagnóstico: la causa exacta de "no me sincroniza" */}
+          <div className="mt-3">
+            <button
+              onClick={diagnosticar}
+              disabled={diagCorriendo}
+              data-testid="boton-diagnosticar"
+              className="w-full py-2.5 rounded-xl border border-cyan-500/40 bg-cyan-500/5 hover:bg-cyan-500/10 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
+            >
+              {diagCorriendo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Stethoscope className="w-3.5 h-3.5" />}
+              Diagnosticar sincronización
+            </button>
+
+            {diagnostico && (
+              <div className="mt-2.5 space-y-1.5" data-testid="resultado-diagnostico">
+                {diagnostico.map((p) => (
+                  <div
+                    key={p.paso}
+                    className={`flex items-start gap-2 rounded-xl px-3 py-2 border ${
+                      p.ok ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/30'
+                    }`}
+                  >
+                    {p.ok
+                      ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      : <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />}
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black text-slate-200">{p.paso}</p>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">{p.detalle}</p>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Si la causa son las reglas → la regla exacta para copiar */}
+                {diagnostico.some((p) => p.detalle.includes('permission-denied')) && (
+                  <div className="rounded-xl bg-slate-950/80 border border-amber-500/30 p-3 space-y-2" data-testid="regla-firestore">
+                    <p className="text-[11px] font-black text-amber-300">
+                      👉 La causa: falta esta regla en Firestore. Copiala, pegala en Firebase Console
+                      (fittrack-e06be → Firestore Database → Reglas, DENTRO de
+                      match /databases/…/documents junto a las demás) y apretá Publicar:
+                    </p>
+                    <pre className="text-[10px] font-mono text-emerald-300 bg-black/40 rounded-lg p-2.5 overflow-x-auto leading-relaxed">
+{REGLA_FIRESTORE}
+                    </pre>
+                    <button
+                      onClick={copiarRegla}
+                      className="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center justify-center gap-2"
+                    >
+                      {reglasCopiadas ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {reglasCopiadas ? 'Copiada ✓' : 'Copiar regla'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+      </section>
+
+      {/* ── 🔒 Candado local (F5) ───────────────────────────── */}
+      <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5" data-testid="tarjeta-candado">
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+            pinActivo() ? 'bg-emerald-500/15 border-emerald-500/30' : 'bg-slate-800 border-slate-700'
+          }`}>
+            <Lock className={`w-4 h-4 ${pinActivo() ? 'text-emerald-400' : 'text-slate-400'}`} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-black text-white">Candado de la app</h3>
+            <p className="text-[11px] text-slate-400">
+              {pinActivo()
+                ? '🔒 Activo — se bloquea al abrir y al ir al fondo'
+                : 'Sin PIN — cualquiera que tome tu celu ve tu dinero'}
+            </p>
+          </div>
+          {pinActivo() && (
+            <span className="ml-auto text-[9px] font-mono px-2 py-1 rounded-full border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shrink-0">
+              ON
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed mb-3">
+          PIN de 4 dígitos + huella (si tu equipo la tiene). Local de este aparato: no viaja a la
+          nube y no lo borra el reset de datos — como la clave de tu teléfono.
+        </p>
+
+        {/* Huella (solo con PIN activo y disponible) */}
+        {pinActivo() && (
+          <div className="mb-3 rounded-xl bg-slate-950/60 border border-slate-800 px-3 py-2.5">
+            <div className="flex items-center gap-3">
+              <Fingerprint className={`w-4 h-4 shrink-0 ${huellaOn ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-slate-200">Desbloqueo con huella</p>
+                <p className="text-[10px] text-slate-500 truncate">
+                  {huellaEstado ? huellaEstado.detalle : 'consultando el equipo…'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const nuevo = !huellaOn;
+                  alternarHuella(nuevo);
+                  setHuellaOn(nuevo);
+                  onToast(nuevo ? 'Huella activada 🔓' : 'Huella desactivada — queda el PIN');
+                }}
+                disabled={!esAPK() || !huellaEstado?.ok}
+                title={!esAPK() ? 'Solo en el APK' : (huellaEstado?.ok ? '' : 'Este equipo no tiene huella')}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all disabled:opacity-40 ${
+                  huellaOn
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                    : 'border-slate-600 text-slate-400'
+                }`}
+                data-testid="toggle-huella"
+              >
+                {huellaOn ? 'ON' : 'OFF'}
+              </button>
+            </div>
+            {!esAPK() && (
+              <p className="text-[10px] text-slate-500 mt-1.5">(Disponible solo en el APK instalado)</p>
+            )}
+          </div>
+        )}
+
+        {/* Botones según estado */}
+        {!pinActivo() && modoPin === null && (
+          <button
+            onClick={() => setModoPin('crear')}
+            data-testid="boton-activar-pin"
+            className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+          >
+            <Lock className="w-3.5 h-3.5" /> Activar candado
+          </button>
+        )}
+        {pinActivo() && modoPin === null && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setModoPin('cambiar')}
+              className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all active:scale-[0.98]"
+            >
+              Cambiar PIN
+            </button>
+            <button
+              onClick={() => setModoPin('quitar')}
+              className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-600/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all active:scale-[0.98]"
+              data-testid="boton-quitar-pin"
+            >
+              Quitar candado
+            </button>
+          </div>
+        )}
+
+        {/* Formulario según modo */}
+        {modoPin !== null && (
+          <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3 space-y-2.5" data-testid="form-pin">
+            <p className="text-[11px] font-black text-slate-300">
+              {modoPin === 'crear' ? 'Elegí tu PIN de 4 dígitos' : modoPin === 'cambiar' ? 'PIN actual + nuevo' : 'Confirmá tu PIN para quitar el candado'}
+            </p>
+            {modoPin === 'cambiar' || modoPin === 'quitar' ? (
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinViejo}
+                onChange={(e) => { setPinViejo(e.target.value.replace(/\D/g, '')); setPinError(''); }}
+                placeholder="PIN actual"
+                data-testid="input-pin-actual"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-center text-lg font-black tracking-[0.5em] text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              />
+            ) : null}
+            {modoPin !== 'quitar' && (
+              <>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={pinNuevo}
+                  onChange={(e) => { setPinNuevo(e.target.value.replace(/\D/g, '')); setPinError(''); }}
+                  placeholder={modoPin === 'crear' ? 'PIN (4 dígitos)' : 'PIN nuevo'}
+                  data-testid="input-pin-nuevo"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-center text-lg font-black tracking-[0.5em] text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                />
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={pinConfirma}
+                  onChange={(e) => { setPinConfirma(e.target.value.replace(/\D/g, '')); setPinError(''); }}
+                  placeholder="Repetir PIN"
+                  data-testid="input-pin-confirma"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-center text-lg font-black tracking-[0.5em] text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                />
+              </>
+            )}
+            {pinError && (
+              <p className="text-xs font-bold text-rose-400" data-testid="error-pin">{pinError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setModoPin(null); setPinError(''); setPinViejo(''); setPinNuevo(''); setPinConfirma(''); }}
+                className="flex-1 py-2 rounded-xl border border-slate-600 text-xs font-bold text-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarPin}
+                disabled={candadoTrabajando}
+                data-testid="boton-confirmar-pin"
+                className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold disabled:opacity-60"
+              >
+                {modoPin === 'quitar' ? 'Quitar' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* ── 🔔 Recordatorios (F5) ─────────────────────────────── */}
+      <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5" data-testid="tarjeta-recordatorios">
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+            recordatoriosOn ? 'bg-amber-500/15 border-amber-500/30' : 'bg-slate-800 border-slate-700'
+          }`}>
+            <Bell className={`w-4 h-4 ${recordatoriosOn ? 'text-amber-400' : 'text-slate-400'}`} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-black text-white">Recordatorios de vencimientos</h3>
+            <p className="text-[11px] text-slate-400">
+              {esAPK() ? 'Suena 3 días antes y el día del pago, 9:00 a.m.' : 'Solo en el APK — en web no hay notificaciones'}
+            </p>
+          </div>
+          <button
+            onClick={alternarAvisos}
+            className={`ml-auto px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all shrink-0 ${
+              recordatoriosOn
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                : 'border-slate-600 text-slate-400'
+            }`}
+            data-testid="toggle-recordatorios"
+          >
+            {recordatoriosOn ? 'ON' : 'OFF'}
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed mb-3">
+          Gastos fijos y cuotas de deudas: la app te avisa en la campanita del teléfono aunque
+          esté cerrada. Revisa la tarjeta de Gastos Fijos para ver qué está programado.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={probar}
+            disabled={!esAPK()}
+            data-testid="boton-probar-notificacion"
+            className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
+          >
+            <Bell className="w-3.5 h-3.5" /> Probar notificación
+          </button>
+          <div className="flex-1 py-2.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-center">
+            <p className="text-[11px] text-slate-400">
+              {estado.subscriptions.length} fijo(s) · {estado.deudas.filter((d) => d.cuotasPagadas < d.totalCuotas).length} deuda(s) con cuotas
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* ── Respaldo ───────────────────────────────────────────── */}
@@ -376,7 +785,15 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
               <CheckCircle2 className="w-3.5 h-3.5" /> F4 · 🤖 WalletBot + Theme Studio ✓ (instalada)
             </p>
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              WalletBot 2.0: análisis priorizado del mes y preguntas rápidas con tus datos reales (offline). Theme Studio: 9 temas, luminosidad, estilos, fondos animados y tipografía — el roadmap quedó COMPLETO.
+              WalletBot 2.0: análisis priorizado del mes y preguntas rápidas con tus datos reales (offline). Theme Studio: 9 temas, luminosidad, estilos, fondos animados y tipografía.
+            </p>
+          </div>
+          <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3">
+            <p className="text-xs font-black text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5" /> F5 · 🔒 Seguridad + Conveniencia ✓ (instalada)
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+              Candado local (PIN + huella, se re-bloquea al fondo), recordatorios de vencimientos con notificaciones, sueldos y fijos programados que se registran solos, categorías y cuentas propias, y diagnóstico del sync con la regla de Firestore lista para copiar.
             </p>
           </div>
         </div>

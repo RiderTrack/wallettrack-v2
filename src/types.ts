@@ -190,6 +190,27 @@ export interface TemaWallet {
   animSpeed: 'fast' | 'normal' | 'slow' | 'none';
 }
 
+// ── F5 · SEGURIDAD + RECORDATORIOS + RECURRENTES ────────────
+/** Config del candado local (wallettrack_security — clave del viejo, local: NO viaja a la nube) */
+export interface SeguridadWallet {
+  pin: string | null;      // hash del PIN de 4 dígitos (null = sin candado)
+  huella: boolean;         // usar huella/distractor biométrico cuando esté disponible
+}
+
+/** Movimiento programado (sueldo semanal, alquiler, etc.) — wallettrack_recurrentes (F5) */
+export interface Recurrente {
+  id: string;                  // 'rec_' + Date.now()
+  nombre: string;
+  monto: number;
+  tipo: 'income' | 'expense';
+  categoria: string;           // nombre de la categoría
+  cuenta: string;              // id de cuenta
+  frecuencia: 'semanal' | 'quincenal' | 'mensual';
+  inicio: string;              // 'YYYY-MM-DD' primera ocurrencia
+  ultimaAplicacion: string | null; // última ocurrencia YA registrada (avanza sola)
+  activo: boolean;
+}
+
 // ── Estado global (espejo del AppState del viejo) ─────────────
 export interface EstadoWallet {
   transactions: Transaccion[];
@@ -209,6 +230,8 @@ export interface EstadoWallet {
   listaCompras: { items: ItemCompra[]; creada: string | null };
   comprasHist: CompraHistorial[];
   gastosRapidos: GastoRapido[];
+  cuentasCustom: Cuenta[];        // F5 · cuentas propias del usuario (id 'cc_*')
+  recurrentes: Recurrente[];      // F5 · movimientos programados
 }
 
 // ── Respaldo JSON (formato v3.0 del viejo) ────────────────────
@@ -232,4 +255,6 @@ export interface RespaldoWallet {
   listaCompras?: { items: ItemCompra[]; creada: string | null };
   comprasHist?: CompraHistorial[];
   gastosRapidos?: GastoRapido[];
+  cuentasCustom?: Cuenta[];        // F5 · viaja también en el respaldo JSON
+  recurrentes?: Recurrente[];
 }

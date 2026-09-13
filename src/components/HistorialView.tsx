@@ -8,18 +8,20 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Trash2, FileSpreadsheet, FileJson } from 'lucide-react';
 import type { EstadoWallet, Transaccion } from '../types';
-import { CUENTAS_CATALOG, CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT } from '../data/catalogos';
+import { todasLasCuentas, CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT } from '../data/catalogos';
 import { soles, fechaCorta } from '../services/dinero';
 import { filtrarTransacciones } from '../services/estado';
 import { transaccionesACSV } from '../services/archivo';
+import { RecurrentesCard } from './RecurrentesCard';
 
 interface HistorialViewProps {
   estado: EstadoWallet;
   onEliminar: (id: string) => void;
+  onAplicar: (nuevo: EstadoWallet) => void;   // F5: recurrentes
   onToast: (mensaje: string) => void;
 }
 
-export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar, onToast }) => {
+export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar, onAplicar, onToast }) => {
   const [texto, setTexto] = useState('');
   const [tipo, setTipo] = useState<'all' | 'income' | 'expense'>('all');
   const [categoria, setCategoria] = useState('all');
@@ -38,7 +40,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
   const totalIngresos = filtradas.filter((t) => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
   const totalGastos = filtradas.filter((t) => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
 
-  const cuenta = (id?: string) => CUENTAS_CATALOG.find((c) => c.id === (id ?? 'efectivo'));
+  const cuenta = (id?: string) => todasLasCuentas(estado).find((c) => c.id === (id ?? 'efectivo'));
 
   const exportarCSV = () => {
     if (filtradas.length === 0) { onToast('No hay movimientos que exportar'); return; }
@@ -64,6 +66,9 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
 
   return (
     <div className="space-y-4 wt-aparece" data-testid="vista-historial">
+
+      {/* F5 · 🔁 Sueldos y fijos programados (se registran solos) */}
+      <RecurrentesCard estado={estado} onAplicar={onAplicar} onToast={onToast} />
       <div className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5">
 
         {/* Título + export */}

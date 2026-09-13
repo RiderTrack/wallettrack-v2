@@ -7,11 +7,14 @@
 // ═══════════════════════════════════════════════════════════
 
 import React, { useState } from 'react';
-import { ArrowLeftRight, Send, Save, Trash2, Info } from 'lucide-react';
+import { ArrowLeftRight, Send, Save, Trash2, Info, Plus } from 'lucide-react';
 import type { EstadoWallet } from '../types';
-import { CUENTAS_CATALOG } from '../data/catalogos';
+import { todasLasCuentas, EMOJIS_NUEVA, COLORES_CUENTA } from '../data/catalogos';
 import { soles, parseMonto } from '../services/dinero';
-import { saldoCuenta, saldoTotal, movimientosDeCuenta, hacerTransferencia } from '../services/estado';
+import {
+  saldoCuenta, saldoTotal, movimientosDeCuenta, hacerTransferencia,
+  crearCuentaCustom, eliminarCuentaCustom,
+} from '../services/estado';
 
 interface CuentasViewProps {
   estado: EstadoWallet;
@@ -19,36 +22,39 @@ interface CuentasViewProps {
   onGuardarSaldos: (saldos: Record<string, number>) => void;
   onTransferencia: (from: string, to: string, monto: number) => string | null; // devuelve error o null
   onReset: () => void;
+  onAplicar: (nuevo: EstadoWallet) => void;   // F5: cuentas propias
   onToast: (mensaje: string) => void;
 }
 
 export const CuentasView: React.FC<CuentasViewProps> = ({
-  estado, onRegistrar, onGuardarSaldos, onTransferencia, onReset, onToast,
+  estado, onRegistrar, onGuardarSaldos, onTransferencia, onReset, onAplicar, onToast,
 }) => {
+  const cuentas = todasLasCuentas(estado);
   const total = saldoTotal(estado);
 
   // ── Saldos iniciales (borrador local hasta Guardar) ──────────
   const [borradorSaldos, setBorradorSaldos] = useState<Record<string, string>>(() => {
     const inicial: Record<string, string> = {};
-    for (const c of CUENTAS_CATALOG) {
+    for (const c of todasLasCuentas(estado)) {
       inicial[c.id] = estado.saldosIniciales[c.id] !== undefined ? String(estado.saldosIniciales[c.id]) : '';
     }
     return inicial;
   });
   const [saldosGuardados, setSaldosGuardados] = useState(false);
 
-  // Reactivo si cambia el estado global (ej. importaron respaldo)
+  // Reactivo si cambia el estado global (ej. importaron respaldo o crearon cuenta)
   React.useEffect(() => {
     const inicial: Record<string, string> = {};
-    for (const c of CUENTAS_CATALOG) {
+    for (const c of todasLasCuentas(estado)) {
       inicial[c.id] = estado.saldosIniciales[c.id] !== undefined ? String(estado.saldosIniciales[c.id]) : '';
     }
     setBorradorSaldos(inicial);
-  }, [estado.saldosIniciales]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado.saldosIniciales, estado.cuentasCustom]);
 
   const guardarSaldos = () => {
     const finales: Record<string, number> = {};
-    for (const c of CUENTAS_CATALOG) {
+    for (const c of todasLasCuentas(estado)) {
       const crudo = (borradorSaldos[c.id] ?? '').trim();
       const n = crudo === '' ? 0 : (parseMonto(crudo) ?? 0);
       finales[c.id] = n;
@@ -77,6 +83,30 @@ export const CuentasView: React.FC<CuentasViewProps> = ({
 
   const [confirmandoReset, setConfirmandoReset] = useState(false);
 
+  // ── F5 · Crear cuenta propia ──────────────────────────────
+  const [creandoCuenta, setCreandoCuenta] = useState(false);
+  const [nuevoNombreCuenta, setNuevoNombreCuenta] = useState('');
+  const [nuevoEmojiCuenta, setNuevoEmojiCuenta] = useState('💳');
+  const [nuevoColorCuenta, setNuevoColorCuenta] = useState('#64748b');
+  const [nuevoTipoCuenta, setNuevoTipoCuenta] = useState<'banco' | 'billetera' | 'efectivo'>('billetera');
+  const [errorCuenta, setErrorCuenta] = useState('');
+  const [confirmandoBorrarCuenta, setConfirmandoBorrarCuenta] = useState<string | null>(null);
+
+  const crearLaCuenta = () => {
+    const r = crearCuentaCustom(estado, {
+      nombre: nuevoNombreCuenta,
+      emoji: nuevoEmojiCuenta,
+      color: nuevoColorCuenta,
+      tipo: nuevoTipoCuenta,
+    });
+    if (!r.ok) { setErrorCuenta(r.error ?? 'No se pudo crear'); return; }
+    onAplicar(r.estado);
+    setCreandoCuenta(false);
+    setNuevoNombreCuenta('');
+    setErrorCuenta('');
+    onToast(`🏦 Cuenta "${nuevoNombreCuenta.trim()}" creada`);
+  };
+
   return (
     <div className="space-y-5 wt-aparece" data-testid="vista-cuentas">
 
@@ -95,7 +125,8 @@ export const CuentasView: React.FC<CuentasViewProps> = ({
 
       {/* ── Tarjetas por cuenta ────────────────────────────────── */}
       <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {CUENTAS_CATALOG.map((c) => {
+        {todasLasCuentas(estado).map((c) => {
+          const esCustom = c.id.startsWith('cc_');
           const saldo = saldoCuenta(estado, c.id);
           const movs = movimientosDeCuenta(estado, c.id);
           const ultimos = movs.slice(0, 3);
@@ -109,7 +140,19 @@ export const CuentasView: React.FC<CuentasViewProps> = ({
               <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full blur-2xl" style={{ background: `${c.color}22` }} />
               <div className="flex items-center justify-between">
                 <span className="text-2xl leading-none">{c.icon}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{c.tipo}</span>
+                <div className="flex items-center gap-2">
+                  {esCustom && (
+                    <button
+                      onClick={() => setConfirmandoBorrarCuenta(c.id)}
+                      title="Quitar esta cuenta"
+                      data-testid={`borrar-cuenta-${c.id}`}
+                      className="w-7 h-7 rounded-lg border border-slate-600/60 text-slate-400 hover:text-rose-400 hover:border-rose-500/50 flex items-center justify-center transition-all"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{c.tipo}</span>
+                </div>
               </div>
               <p className="text-sm font-bold text-slate-200 mt-3">{c.name}</p>
               <p className="text-3xl font-black tracking-tight mt-0.5" style={{ color: c.color }}>{soles(saldo)}</p>
@@ -144,9 +187,114 @@ export const CuentasView: React.FC<CuentasViewProps> = ({
                   − Gasto
                 </button>
               </div>
+
+              {/* Confirmación de borrado (solo cuentas propias) */}
+              {confirmandoBorrarCuenta === c.id && (
+                <div className="mt-3 flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 rounded-xl px-3 py-2">
+                  <p className="text-[10px] text-slate-300 flex-1 leading-snug">
+                    ¿Quitar "{c.name}"? Los movimientos quedan en el historial pero dejan de sumar al patrimonio.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setConfirmandoBorrarCuenta(null);
+                      onAplicar(eliminarCuentaCustom(estado, c.id));
+                      onToast(`Cuenta "${c.name}" quitada`);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold"
+                  >
+                    Quitar
+                  </button>
+                  <button
+                    onClick={() => setConfirmandoBorrarCuenta(null)}
+                    className="px-2 py-1 rounded-lg border border-slate-600 text-[10px] font-bold text-slate-300"
+                  >
+                    No
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
+
+        {/* F5 · + Nueva cuenta propia (tarjeta punteada al final del grid) */}
+        {!creandoCuenta ? (
+          <button
+            onClick={() => setCreandoCuenta(true)}
+            data-testid="boton-nueva-cuenta"
+            className="rounded-3xl border-2 border-dashed border-slate-700 hover:border-emerald-500/50 p-5 flex flex-col items-center justify-center gap-2 text-slate-500 hover:text-emerald-400 transition-all min-h-[180px]"
+          >
+            <Plus className="w-6 h-6" />
+            <span className="text-xs font-bold">Nueva cuenta</span>
+            <span className="text-[10px] text-slate-600">Otro banco, billetera o caja</span>
+          </button>
+        ) : (
+          <div className="rounded-3xl border border-emerald-500/40 bg-slate-950/70 p-5 space-y-2.5" data-testid="form-nueva-cuenta">
+            <p className="text-xs font-black text-white">Nueva cuenta</p>
+            <input
+              type="text"
+              value={nuevoNombreCuenta}
+              onChange={(e) => { setNuevoNombreCuenta(e.target.value); setErrorCuenta(''); }}
+              placeholder="Nombre (ej: Caja de ahorro)"
+              maxLength={24}
+              data-testid="input-nueva-cuenta-nombre"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
+            <div className="grid grid-cols-3 gap-2">
+              {(['banco', 'billetera', 'efectivo'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setNuevoTipoCuenta(t)}
+                  className={`py-2 rounded-lg text-[10px] font-bold border transition-all ${
+                    nuevoTipoCuenta === t ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 text-slate-400'
+                  }`}
+                >
+                  {t === 'banco' ? '🏦 Banco' : t === 'billetera' ? '📲 Billetera' : '💵 Efectivo'}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1 flex-wrap">
+              {EMOJIS_NUEVA.slice(0, 10).map((e) => (
+                <button
+                  key={e}
+                  onClick={() => setNuevoEmojiCuenta(e)}
+                  className={`w-7 h-7 rounded-lg text-sm leading-none flex items-center justify-center border transition-all ${
+                    nuevoEmojiCuenta === e ? 'border-emerald-500 bg-emerald-500/15' : 'border-slate-700 hover:border-slate-500'
+                  }`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {COLORES_CUENTA.map((col) => (
+                <button
+                  key={col}
+                  onClick={() => setNuevoColorCuenta(col)}
+                  className={`w-6 h-6 rounded-full border-2 transition-all ${
+                    nuevoColorCuenta === col ? 'border-white scale-110' : 'border-slate-700'
+                  }`}
+                  style={{ background: col }}
+                />
+              ))}
+            </div>
+            {errorCuenta && <p className="text-[11px] font-bold text-rose-400">{errorCuenta}</p>}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { setCreandoCuenta(false); setErrorCuenta(''); }}
+                className="flex-1 py-2 rounded-xl border border-slate-600 text-xs font-bold text-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={crearLaCuenta}
+                data-testid="boton-guardar-cuenta"
+                className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
+              >
+                Crear cuenta
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ── Saldos iniciales ───────────────────────────────────── */}
@@ -156,7 +304,7 @@ export const CuentasView: React.FC<CuentasViewProps> = ({
           Ingresa cuánto tenías en cada cuenta cuando empezaste a usar WalletTrack.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {CUENTAS_CATALOG.map((c) => (
+          {todasLasCuentas(estado).map((c) => (
             <label key={c.id} className="flex items-center gap-3 bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2.5">
               <span className="text-lg leading-none shrink-0">{c.icon}</span>
               <span className="text-xs font-bold text-slate-300 w-20 shrink-0">{c.name}</span>
@@ -236,7 +384,7 @@ export const CuentasView: React.FC<CuentasViewProps> = ({
                 data-testid="transfer-from"
                 className="w-full bg-slate-950/70 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
               >
-                {CUENTAS_CATALOG.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                {todasLasCuentas(estado).map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
               </select>
             </div>
             <div>
@@ -247,7 +395,7 @@ export const CuentasView: React.FC<CuentasViewProps> = ({
                 data-testid="transfer-to"
                 className="w-full bg-slate-950/70 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
               >
-                {CUENTAS_CATALOG.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                {todasLasCuentas(estado).map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
               </select>
             </div>
           </div>
