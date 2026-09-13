@@ -21,6 +21,7 @@ import {
   User,
 } from 'firebase/auth';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyArpeh_5hQqUIUnE19eQ-ClVeMnqhC0Zjs',
@@ -35,6 +36,7 @@ const firebaseConfig = {
 let app;
 let auth;
 let db;
+let storage;
 
 try {
   app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -47,11 +49,14 @@ try {
   } else {
     db = getFirestore(app);
   }
+
+  // F6 · Storage para comprobantes (mismo proyecto fittrack-e06be)
+  storage = getStorage(app);
 } catch (e) {
   console.error('Error inicializando Firebase:', e);
 }
 
-export { app, auth, db };
+export { app, auth, db, storage };
 export { GoogleAuthProvider };
 
 // ═══════════════════════════════════════════════════════════

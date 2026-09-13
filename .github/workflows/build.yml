@@ -57,12 +57,12 @@ jobs:
       - name: Copy google-services.json
         run: cp google-services.json android/app/google-services.json
 
-      - name: F5 · Versionar APK (versionCode 7 · versionName 1.5.0)
+      - name: F6 · Versionar APK (versionCode 8 · versionName 1.6.0)
         run: |
           GRADLE="android/app/build.gradle"
-          sed -i 's/versionCode 1/versionCode 7/' "$GRADLE"
-          sed -i 's/versionName "1.0"/versionName "1.5.0"/' "$GRADLE"
-          echo "✅ versionCode 7 · versionName 1.5.0"
+          sed -i 's/versionCode 1/versionCode 8/' "$GRADLE"
+          sed -i 's/versionName "1.0"/versionName "1.6.0"/' "$GRADLE"
+          echo "✅ versionCode 8 · versionName 1.6.0"
           grep -E "versionCode|versionName" "$GRADLE" || true
 
       # ── F1.1 · GOOGLE LOGIN (patrón exacto del FitTrack V2) ────
@@ -166,7 +166,7 @@ jobs:
       - name: Update AndroidManifest permissions
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <application|' "$MANIFEST"
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <application|' "$MANIFEST"
 
       - name: Set Gradle permissions
         run: chmod +x android/gradlew
@@ -236,14 +236,14 @@ jobs:
           KEY_PASS="${{ secrets.KEY_PASSWORD }}"
           if [ -z "$STORE_PASS" ]; then STORE_PASS="wallettrack123"; echo "⚠️ STORE_PASSWORD no configurado — usando clave temporal del viejo"; fi
           if [ -z "$KEY_PASS" ]; then KEY_PASS="wallettrack123"; echo "⚠️ KEY_PASSWORD no configurado — usando clave temporal del viejo"; fi
-          $APKSIGNER sign --ks release.keystore --ks-key-alias wallettrack --ks-pass "pass:$STORE_PASS" --key-pass "pass:$KEY_PASS" --out WalletTrack-V2-F5.apk WalletTrack-aligned.apk
+          $APKSIGNER sign --ks release.keystore --ks-key-alias wallettrack --ks-pass "pass:$STORE_PASS" --key-pass "pass:$KEY_PASS" --out WalletTrack-V2-F6.apk WalletTrack-aligned.apk
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: WalletTrack-V2-APK
-          path: WalletTrack-V2-F5.apk
+          path: WalletTrack-V2-F6.apk
           retention-days: 30
 
       - name: Show APK info
-        run: du -sh WalletTrack-V2-F5.apk
+        run: du -sh WalletTrack-V2-F6.apk

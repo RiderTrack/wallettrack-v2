@@ -161,6 +161,9 @@ export interface DatosTransaccion {
   cuenta: string;
   fecha: string;
   descripcion: string;
+  // F6 · comprobante (foto de boleta) — opcional
+  comprobanteLocal?: string;     // dataURL JPEG pendiente de subir
+  comprobanteUrl?: string;       // URL Storage (si ya subió)
 }
 
 /**
@@ -200,11 +203,19 @@ export function agregarTransaccion(estado: EstadoWallet, datos: DatosTransaccion
     description: datos.descripcion || `${datos.categoria} General`,
     account: datos.cuenta || 'efectivo',
   };
+  // F6 · comprobante (viaja con la tx — el sync lo propaga solo)
+  if (datos.comprobanteLocal) nueva.comprobanteLocal = datos.comprobanteLocal;
+  if (datos.comprobanteUrl)   nueva.comprobanteUrl   = datos.comprobanteUrl;
   return { ...estado, transactions: [nueva, ...estado.transactions] };
 }
 
 export function eliminarTransaccion(estado: EstadoWallet, id: string): EstadoWallet {
   return { ...estado, transactions: estado.transactions.filter((t) => t.id !== id) };
+}
+
+/** F6 · Devuelve la tx por id (para limpiar comprobante antes de eliminar) */
+export function obtenerTransaccion(estado: EstadoWallet, id: string): Transaccion | undefined {
+  return estado.transactions.find((t) => t.id === id);
 }
 
 /** Gasto de 1 toque (los ⚡ del dashboard) */

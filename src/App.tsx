@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🚀 APP — WalletTrack V2 (F5 · SEGURIDAD + CONVENIENCIA)
+// 🚀 APP — WalletTrack V2 (F6 · COMPROBANTES)
 // Arquitectura gemela de FitTrack V2:
 //   • Navegación por vista activa (activeView) — sin router
 //   • ☰ Menú hamburguesa (NavDrawer) con TODAS las secciones
@@ -13,6 +13,9 @@
 //     fondo), 🔔 recordatorios de vencimientos (APK), 🔁 sueldos
 //     y fijos programados con catch-up idempotente, categorías
 //     y cuentas propias, y 🩺 diagnóstico del sync en Ajustes.
+//   • F6: 📎 comprobantes (foto de boleta) en cada transacción —
+//     subida a Firebase Storage con cola offline persistente,
+//     thumbnail en historial y viewer pantalla completa con zoom.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -23,7 +26,7 @@ import {
 import type { EstadoWallet, TemaWallet, VistaApp } from './types';
 import { nombrePlataforma, versionApp, esAPK } from './services/platform';
 import {
-  leerEstado, persistir, agregarTransaccion, eliminarTransaccion,
+  leerEstado, persistir, agregarTransaccion, eliminarTransaccion, obtenerTransaccion,
   registrarGastoRapido, guardarSaldosIniciales, hacerTransferencia,
   importarRespaldo, resetTotal, aplicarRecurrentesPendientes, crearCategoria,
 } from './services/estado';
@@ -33,6 +36,9 @@ import { useAuth, esModoLocal, marcarModoLocal } from './hooks/useAuth';
 import { soles } from './services/dinero';
 import { pinActivo } from './services/seguridad';
 import { reprogramarRecordatorios } from './services/recordatorios';
+import {
+  encolarComprobante, procesarCola, limpiarComprobanteTx, pendientesCola,
+} from './services/comprobantes';
 import { NavDrawer } from './components/NavDrawer';
 import { DashboardView } from './components/DashboardView';
 import { CuentasView } from './components/CuentasView';
@@ -161,6 +167,25 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estado.subscriptions, estado.deudas]);
 
+  // F6 · 📎 Cola de comprobantes: procesa pendientes al arrancar
+  // (si hay sesión) y al volver al frente. Cuando sube OK, reemplaza
+  // comprobanteLocal por comprobanteUrl y el sync normal propaga.
+  useEffect(() => {
+    if (!usuario?.uid) return;
+    // Arranque: procesar tras 2s (dar tiempo al init de Firebase)
+    const t = setTimeout(() => { void procesarCola().then(() => setEstado(leerEstado())); }, 2000);
+    const alVisible = () => {
+      if (document.visibilityState === 'visible' && pendientesCola() > 0) {
+        void procesarCola().then(() => setEstado(leerEstado()));
+      }
+    };
+    document.addEventListener('visibilitychange', alVisible);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('visibilitychange', alVisible);
+    };
+  }, [usuario?.uid]);
+
   // F1: salir — cierra sesión Firebase (y Google nativo en APK) o
   // vuelve del modo local; siempre regresa al LoginScreen.
   const salir = async () => {
@@ -203,11 +228,30 @@ export default function App() {
   };
 
   const guardarTransaccion = (datos: Parameters<typeof agregarTransaccion>[1]) => {
-    aplicar(agregarTransaccion(estado, datos));
+    const nuevoEstado = agregarTransaccion(estado, datos);
+    aplicar(nuevoEstado);
     setModalAbierto(false);
     mostrarToast(datos.type === 'income'
       ? `Ingreso de ${soles(datos.monto)} registrado`
       : `Gasto de ${soles(datos.monto)} registrado`);
+    // F6 · Comprobante: si trae foto local, encolar para subir a Storage
+    if (datos.comprobanteLocal && usuario?.uid) {
+      const nuevaTx = nuevoEstado.transactions[0];
+      if (nuevaTx?.id) {
+        encolarComprobante(usuario.uid, nuevaTx.id, datos.comprobanteLocal);
+        void procesarCola().then(() => setEstado(leerEstado()));
+      }
+    }
+  };
+
+  // F6 · Eliminar tx → limpiar comprobante (cola + Storage) antes de sacar del estado
+  const eliminarTransaccionConComprobante = (id: string) => {
+    const tx = obtenerTransaccion(estado, id);
+    if (tx) {
+      void limpiarComprobanteTx(usuario?.uid ?? null, tx);
+    }
+    aplicar(eliminarTransaccion(estado, id));
+    mostrarToast('Movimiento eliminado');
   };
 
   const gastoRapido = (index: number) => {
@@ -249,7 +293,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F5</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F6</p>
       </div>
     );
   }
@@ -312,7 +356,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F5 · SEGURIDAD
+            F6 · COMPROBANTES
           </span>
           <button
             onClick={() => setStudioAbierto(true)}
@@ -406,7 +450,7 @@ export default function App() {
         {vista === 'historial' && (
           <HistorialView
             estado={estado}
-            onEliminar={(id) => { aplicar(eliminarTransaccion(estado, id)); mostrarToast('Movimiento eliminado'); }}
+            onEliminar={eliminarTransaccionConComprobante}
             onAplicar={aplicar}
             onToast={mostrarToast}
           />

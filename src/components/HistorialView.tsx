@@ -6,13 +6,14 @@
 // ═══════════════════════════════════════════════════════════
 
 import React, { useMemo, useState } from 'react';
-import { Search, Trash2, FileSpreadsheet, FileJson } from 'lucide-react';
+import { Search, Trash2, FileSpreadsheet, FileJson, Paperclip } from 'lucide-react';
 import type { EstadoWallet, Transaccion } from '../types';
 import { todasLasCuentas, CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT } from '../data/catalogos';
 import { soles, fechaCorta } from '../services/dinero';
 import { filtrarTransacciones } from '../services/estado';
 import { transaccionesACSV } from '../services/archivo';
 import { RecurrentesCard } from './RecurrentesCard';
+import { ComprobanteViewer } from './ComprobanteViewer';
 
 interface HistorialViewProps {
   estado: EstadoWallet;
@@ -26,6 +27,9 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
   const [tipo, setTipo] = useState<'all' | 'income' | 'expense'>('all');
   const [categoria, setCategoria] = useState('all');
   const [aConfirmar, setAConfirmar] = useState<string | null>(null);
+  // F6 · viewer de comprobante
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null);
+  const [viewerDesc, setViewerDesc] = useState<string>('');
 
   const todasCategorias = useMemo(
     () => [...CATS_GASTO_DEFAULT, ...CATS_INGRESO_DEFAULT, ...estado.categoriasGasto, ...estado.categoriasIngreso],
@@ -158,7 +162,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-800">
-            <table className="w-full text-left border-collapse min-w-[640px]">
+            <table className="w-full text-left border-collapse min-w-[720px]">
               <thead>
                 <tr className="bg-slate-900/90 text-slate-400 text-[10px] font-black uppercase tracking-wider">
                   <th className="p-3">Fecha</th>
@@ -166,6 +170,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
                   <th className="p-3">Categoría</th>
                   <th className="p-3">Cuenta</th>
                   <th className="p-3 text-right">Monto</th>
+                  <th className="p-3 text-center w-16">Comp.</th>
                   <th className="p-3 text-center w-16"></th>
                 </tr>
               </thead>
@@ -173,6 +178,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
                 {filtradas.map((t: Transaccion) => {
                   const cta = cuenta(t.account);
                   const esIngreso = t.type === 'income';
+                  const srcComprob = t.comprobanteUrl ?? t.comprobanteLocal ?? null;
                   return (
                     <tr key={t.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="p-3 whitespace-nowrap text-slate-400 text-xs">{fechaCorta(t.date)}</td>
@@ -181,6 +187,32 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
                       <td className="p-3 text-xs whitespace-nowrap">{cta?.icon} {cta?.name ?? 'Efectivo'}</td>
                       <td className={`p-3 text-right font-black whitespace-nowrap ${esIngreso ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {esIngreso ? '+' : '−'}{soles(Number(t.amount) || 0)}
+                      </td>
+                      <td className="p-3 text-center">
+                        {srcComprob ? (
+                          <button
+                            onClick={() => { setViewerSrc(srcComprob); setViewerDesc(t.description); }}
+                            data-testid={`comprobante-${t.id}`}
+                            title="Ver comprobante"
+                            className="relative w-9 h-9 rounded-lg overflow-hidden border border-slate-700 hover:border-emerald-500/60 mx-auto block transition-all"
+                          >
+                            <img
+                              src={srcComprob}
+                              alt="Comprobante"
+                              className="w-full h-full object-cover"
+                            />
+                            {!t.comprobanteUrl && t.comprobanteLocal && (
+                              <span
+                                title="Pendiente de subir a la nube"
+                                className="absolute top-0 right-0 w-2.5 h-2.5 bg-amber-500 rounded-full border border-slate-900"
+                              />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="text-slate-700 inline-flex" title="Sin comprobante">
+                            <Paperclip className="w-4 h-4 opacity-30" />
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 text-center">
                         {aConfirmar === t.id ? (
@@ -228,6 +260,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
           </button>
         )}
       </div>
+
+      {/* F6 · Viewer de comprobante (pantalla completa con zoom) */}
+      <ComprobanteViewer
+        abierto={viewerSrc !== null}
+        src={viewerSrc}
+        descripcion={viewerDesc}
+        onCerrar={() => { setViewerSrc(null); setViewerDesc(''); }}
+      />
     </div>
   );
 };

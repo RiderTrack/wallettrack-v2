@@ -47,6 +47,9 @@ export interface Transaccion {
   description: string;
   account?: string;              // id de cuenta ('efectivo' si falta)
   esSobre?: boolean;             // F2: recargas de sobres desde balance (viejo)
+  // F6 · COMPROBANTES (foto de boleta)
+  comprobanteUrl?: string;       // URL pública en Firebase Storage (cuando ya subió)
+  comprobanteLocal?: string;     // dataURL o path local pendiente de subir (cola offline)
 }
 // ── Módulos de fases futuras (se leen del storage ya en F0) ──
 export interface Meta {

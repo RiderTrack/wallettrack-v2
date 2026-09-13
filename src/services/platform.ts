@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F5 · Candado + Recordatorios';
+  return 'F6 · Comprobantes';
 }

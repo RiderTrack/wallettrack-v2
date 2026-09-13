@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// ⚠️⚠️⚠️ NO PUBLICAR A CIEGAS ⚠️⚠️⚠️
+//
+// Este archivo es DOCUMENTACIÓN de referencia. Las reglas ACTIVAS
+// de Storage viven en Firebase Console del proyecto fittrack-e06be
+// (el mismo del FitTrack). NO se publican desde acá — solo se pegan
+// en la Console (Storage → Reglas → Publicar).
+//
+// F6 solo necesita AGREGAR UN BLOQUE a las reglas existentes.
+// En Firebase Console → Storage → Reglas, agrega esto DENTRO
+// de `match /b/{bucket}/o { ... }` (sin borrar nada):
+//
+//     match /wallettrack_comprobantes/{uid}/{fileName} {
+//       allow read, write: if request.auth != null && request.auth.uid == uid;
+//     }
+//
+// Carpeta usada por WalletTrack V2 (F6 · Comprobantes):
+//   wallettrack_comprobantes/{uid}/{txId}.jpg — fotos de boletas
+//   de cada transacción. Solo el dueño lee/escribe sus archivos.
+//   El path incluye el uid → la regla lo valida contra el auth.
+//
+// Si Storage todavía no está inicializado en el proyecto:
+//   Firebase Console → Storage → Get started → Production mode → Done.
+//   Solo se hace una vez. Las reglas iniciales default niegan todo,
+//   por eso hace falta agregar el bloque de arriba.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Bloque a AGREGAR (WalletTrack V2 · F6):
+    match /wallettrack_comprobantes/{uid}/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
