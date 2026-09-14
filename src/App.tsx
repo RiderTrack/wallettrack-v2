@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🚀 APP — WalletTrack V2 (F7 · BOT PROACTIVO)
+// 🚀 APP — WalletTrack V2 (F8 · SANKEY DE FLUJO)
 // Arquitectura gemela de FitTrack V2:
 //   • Navegación por vista activa (activeView) — sin router
 //   • ☰ Menú hamburguesa (NavDrawer) con TODAS las secciones
@@ -17,11 +17,14 @@
 //     subida a Firebase Storage con cola offline persistente,
 //     thumbnail en historial y viewer pantalla completa con zoom.
 //   • F7: 🤖 WalletBot proactivo — el bot te empuja avisos
-//     inteligentes con notificaciones locales (las mismas de F5)
-//     cuando detecta algo importante: presupuesto en riesgo,
-//     categoría excesiva, tasa de ahorro crítica, gastos
-//     creciendo, etc. Reutiliza las 12 reglas del bot de F4,
-//     con dedupe por día y horario silencioso 22:00–7:00.
+//     inteligentes con notificaciones locales cuando detecta algo
+//     importante. Reutiliza las 12 reglas del bot de F4, con
+//     dedupe por día y horario silencioso 22:00–7:00.
+//   • F8: 🌊 Sankey de flujo de dinero en Estadísticas —
+//     visualización SVG pura que muestra a dónde va cada sol de
+//     los ingresos del mes: top 5 categorías + Otros, sobres,
+//     metas y saldo restante. Paths Bézier con grosor proporcional,
+//     hover para resaltar. Mismo ADN de las gráficas de F3.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -317,7 +320,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F7</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F8</p>
       </div>
     );
   }
@@ -380,7 +383,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F7 · BOT PROACTIVO
+            F8 · SANKEY
           </span>
           <button
             onClick={() => setStudioAbierto(true)}

@@ -12,10 +12,11 @@
 import React, { useState } from 'react';
 import { TrendingUp, FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
 import type { EstadoWallet } from '../types';
-import { resumenMeses } from '../services/estado';
+import { resumenMeses, resumenMes, saldoTotal } from '../services/estado';
 import { exportarExcel, exportarPDF } from '../services/exportar';
 import { soles } from '../services/dinero';
 import { GraficaEvolucion, GraficaAhorro } from './GraficasStats';
+import { SankeyFlujo, COLORES_CATS as COLORES_CATS_SANKEY, COLOR_OTROS, COLOR_SOBRES, COLOR_METAS, COLOR_SALDO, type DatosSankey, type NodoFlujo } from './SankeyFlujo';
 
 interface EstadisticasViewProps {
   estado: EstadoWallet;
@@ -59,6 +60,70 @@ export const EstadisticasView: React.FC<EstadisticasViewProps> = ({ estado, onTo
   const topCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCat = topCats[0]?.[1] || 1;
 
+  // ── F8 · 🌊 Sankey: cálculo de flujos del mes actual ──
+  const { ingresos: ingMes, gastos: gasMes } = resumenMes(estado);
+  // Top 5 categorías de gasto del MES + "Otros"
+  const catMapMes: Record<string, number> = {};
+  allTx.forEach((t) => {
+    const mesISO = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    if (t.type === 'expense' && t.category !== '__fondo_empresa__' && !t.esSobre && (t.date || '').startsWith(mesISO)) {
+      catMapMes[t.category] = (catMapMes[t.category] || 0) + (Number(t.amount) || 0);
+    }
+  });
+  const topCatsMes = Object.entries(catMapMes).sort((a, b) => b[1] - a[1]);
+  const top5CatsMes = topCatsMes.slice(0, 5);
+  const otrosCatsMonto = topCatsMes.slice(5).reduce((a, [, v]) => a + v, 0);
+  // Sobres: recargas del mes (sobreMovs tipo recarga en el mes actual)
+  const mesISOActual = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const sobresRecargadosMes = estado.sobreMovs
+    .filter((m) => m.tipo === 'recarga' && (m.fecha || '').startsWith(mesISOActual))
+    .reduce((a, m) => a + (Number(m.monto) || 0), 0);
+  // Metas: abonos del mes (transacciones de tipo expense con categoría 'Ahorro' en el mes)
+  const metasAbonadasMes = allTx
+    .filter((t) => t.type === 'expense' && t.category === 'Ahorro' && (t.date || '').startsWith(mesISOActual))
+    .reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  // Saldo restante: ingresos - (gastos + sobres + metas). Si es negativo, 0.
+  const gastosParaSaldo = gasMes + sobresRecargadosMes + metasAbonadasMes;
+  const saldoRestante = Math.max(0, ingMes - gastosParaSaldo);
+
+  const destinosSankey: NodoFlujo[] = [
+    ...top5CatsMes.map(([cat, monto], i) => ({
+      id: `cat_${i}`,
+      label: cat,
+      monto,
+      color: COLORES_CATS_SANKEY[i] ?? COLOR_OTROS,
+    })),
+    ...(otrosCatsMonto > 0 ? [{
+      id: 'otros',
+      label: 'Otros',
+      monto: otrosCatsMonto,
+      color: COLOR_OTROS,
+    }] : []),
+    ...(sobresRecargadosMes > 0 ? [{
+      id: 'sobres',
+      label: '✉️ Sobres',
+      monto: sobresRecargadosMes,
+      color: COLOR_SOBRES,
+    }] : []),
+    ...(metasAbonadasMes > 0 ? [{
+      id: 'metas',
+      label: '🎯 Metas',
+      monto: metasAbonadasMes,
+      color: COLOR_METAS,
+    }] : []),
+    ...(saldoRestante > 0 ? [{
+      id: 'saldo',
+      label: '💰 Saldo',
+      monto: saldoRestante,
+      color: COLOR_SALDO,
+    }] : []),
+  ];
+
+  const datosSankey: DatosSankey = {
+    totalIngresos: ingMes,
+    destinos: destinosSankey,
+  };
+
   const ultimos6 = meses.slice(-6);
 
   const lanzarExcel = async () => {
@@ -98,6 +163,23 @@ export const EstadisticasView: React.FC<EstadisticasViewProps> = ({ estado, onTo
           </div>
         ))}
       </div>
+
+      {/* ── F8 · 🌊 Sankey de flujo del mes ── */}
+      <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5" data-testid="tarjeta-sankey">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-1.5">🌊 Flujo del Mes</h3>
+            <p className="text-[10px] text-slate-500 mt-0.5">A dónde fue cada sol de tus ingresos</p>
+          </div>
+          <span className="text-[10px] text-slate-400">
+            Ingresos: <span className="font-bold text-emerald-400">S/ {Math.round(ingMes)}</span>
+          </span>
+        </div>
+        <SankeyFlujo datos={datosSankey} />
+        <p className="text-[10px] text-slate-500 mt-3 leading-relaxed">
+          Tocá un flujo para ver el detalle. El verde del final es lo que te queda sin gastar, apartar ni abonar a metas.
+        </p>
+      </section>
 
       {/* ── Gráfica evolución (líneas ingresos vs gastos) ── */}
       <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5">
