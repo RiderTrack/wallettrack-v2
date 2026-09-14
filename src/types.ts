@@ -214,6 +214,17 @@ export interface Recurrente {
   activo: boolean;
 }
 
+// ── F7 · WALLETBOT PROACTIVO (avisos push del bot) ──────────
+/** Frecuencia de avisos del bot proactivo (ajustes del usuario) */
+export type FrecuenciaBot = 'solo-graves' | 'todos' | 'silencioso';
+
+/** Config del bot proactivo — vive en wallettrack_v2_prefs (local: NO viaja a la nube) */
+export interface PrefsBotProactivo {
+  activo: boolean;                 // default ON
+  frecuencia: FrecuenciaBot;       // default 'solo-graves'
+  horarioSilencioso: boolean;      // default ON (no molesta 22:00–7:00)
+}
+
 // ── Estado global (espejo del AppState del viejo) ─────────────
 export interface EstadoWallet {
   transactions: Transaccion[];

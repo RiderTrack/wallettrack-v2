@@ -14,6 +14,7 @@ import {
   Download, Upload, Wallet, Smartphone, Map, CheckCircle2, AlertTriangle,
   Cloud, CloudDownload, CloudUpload, RefreshCw, LogIn, Loader2, Palette,
   Lock, Fingerprint, Bell, Stethoscope, Copy, XCircle, Plus,
+  Bot, Volume2, VolumeX, RotateCcw,
 } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import type { EstadoWallet } from '../types';
@@ -31,6 +32,10 @@ import {
 import {
   recordatoriosActivos, alternarRecordatorios, probarNotificacion,
 } from '../services/recordatorios';
+import {
+  leerPrefsBot, guardarPrefsBot, probarBotProactivo, diagnosticarBot, reiniciarDedupe,
+} from '../services/botproactivo';
+import type { FrecuenciaBot } from '../types';
 import { compartirArchivo, nombreRespaldo } from '../services/archivo';
 import { leerTema } from '../services/tema';
 import type { CuentaUsuario } from '../hooks/useAuth';
@@ -215,6 +220,49 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
   const probar = async () => {
     const ok = await probarNotificacion();
     onToast(ok ? '🔔 Sale en 6 segundos…' : 'El equipo no permitió las notificaciones');
+  };
+
+  // ── F7 · 🤖 Bot Proactivo ──
+  const [prefsBot, setPrefsBot] = useState(leerPrefsBot());
+  const [diagBot, setDiagBot] = useState(diagnosticarBot());
+
+  const recargarDiag = () => setDiagBot(diagnosticarBot());
+
+  const alternarBot = () => {
+    const nuevo = { ...prefsBot, activo: !prefsBot.activo };
+    guardarPrefsBot(nuevo);
+    setPrefsBot(nuevo);
+    onToast(nuevo.activo ? '🤖 Bot proactivo activado' : 'Bot proactivo apagado');
+  };
+
+  const cambiarFrecuencia = (freq: FrecuenciaBot) => {
+    const nuevo = { ...prefsBot, frecuencia: freq };
+    guardarPrefsBot(nuevo);
+    setPrefsBot(nuevo);
+    const labels: Record<FrecuenciaBot, string> = {
+      'solo-graves': 'Solo graves (riesgo + alerta)',
+      'todos': 'Todos (riesgo + alerta + consejo)',
+      'silencioso': 'Silencioso (solo riesgo)',
+    };
+    onToast(`Frecuencia: ${labels[freq]}`);
+  };
+
+  const alternarHorario = () => {
+    const nuevo = { ...prefsBot, horarioSilencioso: !prefsBot.horarioSilencioso };
+    guardarPrefsBot(nuevo);
+    setPrefsBot(nuevo);
+    onToast(nuevo.horarioSilencioso ? 'Horario silencioso ON (22:00–7:00)' : 'Horario silencioso OFF');
+  };
+
+  const probarBot = async () => {
+    const ok = await probarBotProactivo();
+    onToast(ok ? '🤖 Sale en 6 segundos…' : 'El equipo no permitió las notificaciones');
+  };
+
+  const reiniciarAvisosBot = () => {
+    reiniciarDedupe();
+    recargarDiag();
+    onToast('🤖 Registro de avisos reiniciado — el bot puede volver a avisarte hoy');
   };
 
   const confirmarRestaurar = async () => {
@@ -678,6 +726,124 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
         </div>
       </section>
 
+      {/* ── 🤖 Bot Proactivo (F7) ──────────────────────────────── */}
+      <section className="rounded-3xl bg-slate-900 border border-indigo-500/20 p-5" data-testid="tarjeta-bot-proactivo">
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+            prefsBot.activo ? 'bg-indigo-500/15 border-indigo-500/30' : 'bg-slate-800 border-slate-700'
+          }`}>
+            <Bot className={`w-4 h-4 ${prefsBot.activo ? 'text-indigo-400' : 'text-slate-400'}`} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-black text-white">WalletBot Proactivo</h3>
+            <p className="text-[11px] text-slate-400">
+              {esAPK() ? 'El bot te avisa cuando detecta algo importante' : 'Solo en el APK — en web no hay notificaciones'}
+            </p>
+          </div>
+          <button
+            onClick={alternarBot}
+            className={`ml-auto px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all shrink-0 ${
+              prefsBot.activo
+                ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300'
+                : 'border-slate-600 text-slate-400'
+            }`}
+            data-testid="toggle-bot-proactivo"
+          >
+            {prefsBot.activo ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed mb-4">
+          El bot analiza tus gastos con las mismas 12 reglas del chat y te empuja avisos cuando detecta
+          algo: presupuesto en riesgo, categoría excesiva, tasa de ahorro crítica, gastos creciendo.
+          No te aburre: <strong className="text-slate-300">un aviso por día</strong> como máximo, y respeta tu descanso.
+        </p>
+
+        {/* Frecuencia */}
+        <div className="mb-3">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Frecuencia</p>
+          <div className="grid grid-cols-3 gap-2" data-testid="selector-frecuencia-bot">
+            {([
+              { id: 'solo-graves', label: 'Solo graves', desc: 'Riesgo + alerta' },
+              { id: 'todos',       label: 'Todos',       desc: 'Riesgo + alerta + consejo' },
+              { id: 'silencioso',  label: 'Silencioso',  desc: 'Solo riesgo' },
+            ] as { id: FrecuenciaBot; label: string; desc: string }[]).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => cambiarFrecuencia(opt.id)}
+                data-testid={`freq-bot-${opt.id}`}
+                disabled={!prefsBot.activo}
+                className={`py-2 px-2 rounded-xl border text-center transition-all disabled:opacity-40 ${
+                  prefsBot.frecuencia === opt.id
+                    ? 'bg-indigo-500/15 border-indigo-500/50 text-indigo-200'
+                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <p className="text-[11px] font-bold">{opt.label}</p>
+                <p className="text-[9px] opacity-70 mt-0.5">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Horario silencioso */}
+        <div className="flex items-center gap-2.5 mb-3 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+          {prefsBot.horarioSilencioso ? (
+            <VolumeX className="w-4 h-4 text-indigo-400 shrink-0" />
+          ) : (
+            <Volume2 className="w-4 h-4 text-slate-400 shrink-0" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-200">Horario silencioso</p>
+            <p className="text-[10px] text-slate-500">No molesta de 22:00 a 7:00</p>
+          </div>
+          <button
+            onClick={alternarHorario}
+            disabled={!prefsBot.activo}
+            data-testid="toggle-horario-silencioso"
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all disabled:opacity-40 shrink-0 ${
+              prefsBot.horarioSilencioso
+                ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300'
+                : 'border-slate-600 text-slate-400'
+            }`}
+          >
+            {prefsBot.horarioSilencioso ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
+        {/* Diagnóstico */}
+        {esAPK() && (
+          <div className="mb-3 p-2.5 rounded-xl bg-slate-950/40 border border-slate-800 text-[11px]">
+            <p className="text-slate-400">
+              <span className="text-slate-300 font-bold">Avisos hoy:</span> {diagBot.avisosHoy}
+              {diagBot.enHorarioSilencioso && prefsBot.horarioSilencioso && (
+                <span className="text-amber-400 ml-2">· en horario silencioso ahora</span>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Acciones */}
+        <div className="flex gap-2">
+          <button
+            onClick={probarBot}
+            disabled={!esAPK() || !prefsBot.activo}
+            data-testid="boton-probar-bot"
+            className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
+          >
+            <Bot className="w-3.5 h-3.5" /> Probar aviso
+          </button>
+          <button
+            onClick={reiniciarAvisosBot}
+            data-testid="boton-reiniciar-avisos"
+            title="Reiniciar registro de avisos (el bot puede volver a avisarte hoy)"
+            className="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Reiniciar
+          </button>
+        </div>
+      </section>
+
       {/* ── Respaldo ───────────────────────────────────────────── */}
       <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5">
         <h3 className="font-bold text-slate-200 text-base mb-1">Respaldo de Datos</h3>
@@ -794,6 +960,22 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
             </p>
             <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
               Candado local (PIN + huella, se re-bloquea al fondo), recordatorios de vencimientos con notificaciones, sueldos y fijos programados que se registran solos, categorías y cuentas propias, y diagnóstico del sync con la regla de Firestore lista para copiar.
+            </p>
+          </div>
+          <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3">
+            <p className="text-xs font-black text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5" /> F6 · 📎 Comprobantes ✓ (instalada)
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+              Foto de boleta en cada transacción (cámara o galería), subida a Firebase Storage con cola offline persistente, thumbnail en historial con puntito naranja si pendiente, y viewer pantalla completa con zoom.
+            </p>
+          </div>
+          <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3">
+            <p className="text-xs font-black text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5" /> F7 · 🤖 Bot Proactivo ✓ (instalada)
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+              El bot te empuja avisos inteligentes con notificaciones locales cuando detecta algo: presupuesto en riesgo, categoría excesiva, tasa de ahorro crítica, gastos creciendo. Reutiliza las 12 reglas del chat con dedupe por día y horario silencioso 22:00–7:00.
             </p>
           </div>
         </div>

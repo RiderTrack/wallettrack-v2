@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🚀 APP — WalletTrack V2 (F6 · COMPROBANTES)
+// 🚀 APP — WalletTrack V2 (F7 · BOT PROACTIVO)
 // Arquitectura gemela de FitTrack V2:
 //   • Navegación por vista activa (activeView) — sin router
 //   • ☰ Menú hamburguesa (NavDrawer) con TODAS las secciones
@@ -16,6 +16,12 @@
 //   • F6: 📎 comprobantes (foto de boleta) en cada transacción —
 //     subida a Firebase Storage con cola offline persistente,
 //     thumbnail en historial y viewer pantalla completa con zoom.
+//   • F7: 🤖 WalletBot proactivo — el bot te empuja avisos
+//     inteligentes con notificaciones locales (las mismas de F5)
+//     cuando detecta algo importante: presupuesto en riesgo,
+//     categoría excesiva, tasa de ahorro crítica, gastos
+//     creciendo, etc. Reutiliza las 12 reglas del bot de F4,
+//     con dedupe por día y horario silencioso 22:00–7:00.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -39,6 +45,7 @@ import { reprogramarRecordatorios } from './services/recordatorios';
 import {
   encolarComprobante, procesarCola, limpiarComprobanteTx, pendientesCola,
 } from './services/comprobantes';
+import { correrBotProactivo } from './services/botproactivo';
 import { NavDrawer } from './components/NavDrawer';
 import { DashboardView } from './components/DashboardView';
 import { CuentasView } from './components/CuentasView';
@@ -186,6 +193,23 @@ export default function App() {
     };
   }, [usuario?.uid]);
 
+  // F7 · 🤖 Bot proactivo: corre el motor 3s después de cada cambio
+  // de estado (debounce — no correr en cada gasto rápido). Dispara
+  // notificaciones locales si hay avisos nuevos que cumplen el filtro
+  // de frecuencia y horario. Dedupe por día → no repite avisos.
+  const debounceBot = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (debounceBot.current) clearTimeout(debounceBot.current);
+    debounceBot.current = setTimeout(() => {
+      void correrBotProactivo(estado).then((r) => {
+        if (r.disparados > 0) {
+          mostrarToast(`🤖 ${r.disparados} ${r.disparados === 1 ? 'aviso nuevo' : 'avisos nuevos'} del bot`);
+        }
+      });
+    }, 3000);
+    return () => { if (debounceBot.current) clearTimeout(debounceBot.current); };
+  }, [estado]);
+
   // F1: salir — cierra sesión Firebase (y Google nativo en APK) o
   // vuelve del modo local; siempre regresa al LoginScreen.
   const salir = async () => {
@@ -293,7 +317,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F6</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F7</p>
       </div>
     );
   }
@@ -356,7 +380,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F6 · COMPROBANTES
+            F7 · BOT PROACTIVO
           </span>
           <button
             onClick={() => setStudioAbierto(true)}

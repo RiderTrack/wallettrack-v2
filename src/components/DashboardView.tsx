@@ -26,8 +26,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
   const { ingresos, gastos } = resumenMes(estado);
   const recientes = estado.transactions.slice(0, 8);
   const cuenta = (id?: string) => todasLasCuentas(estado).find((c) => c.id === (id ?? 'efectivo'));
-  // F4: los 2 avisos más prioritarios del mes (mismo motor del bot)
-  const avisosBot = analizarWallet(estado).slice(0, 2);
+  // F4: los avisos más prioritarios del mes (mismo motor del bot)
+  // F7: hasta 3 avisos (antes 2) para aprovechar el bot proactivo
+  const avisosBot = analizarWallet(estado).slice(0, 3);
 
   return (
     <div className="space-y-5 wt-aparece" data-testid="vista-dashboard">
@@ -162,6 +163,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 truncate">
                 WalletBot
                 <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-500/20 text-indigo-300 font-bold uppercase">IA</span>
+                {avisosBot.length > 0 && (
+                  <span
+                    data-testid="badge-avisos-nuevos"
+                    className="px-1.5 py-0.5 rounded text-[9px] bg-rose-500/20 text-rose-300 font-bold uppercase animate-pulse"
+                  >
+                    {avisosBot.length} {avisosBot.length === 1 ? 'aviso' : 'avisos'}
+                  </span>
+                )}
               </h3>
               <span className="text-[11px] text-slate-400 block truncate">Análisis del mes en curso</span>
             </div>
@@ -185,10 +194,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
               >
                 <span className="text-sm leading-none mt-0.5 shrink-0">{m.icon}</span>
                 <span
-                  className="text-[11px] leading-relaxed [&_strong]:font-bold line-clamp-2"
+                  className="text-[11px] leading-relaxed [&_strong]:font-bold line-clamp-2 flex-1"
                   style={{ color: c.text }}
                   dangerouslySetInnerHTML={{ __html: m.text }}
                 />
+                <button
+                  onClick={() => onIr('walletbot')}
+                  title="Ver detalle en el bot"
+                  className="text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 self-center transition-all hover:bg-white/5"
+                  style={{ color: c.text, borderColor: c.border }}
+                >
+                  Ver
+                </button>
               </div>
             );
           })}

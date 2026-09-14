@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F6 · Comprobantes';
+  return 'F7 · Bot Proactivo';
 }
