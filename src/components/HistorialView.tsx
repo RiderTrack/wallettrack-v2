@@ -89,10 +89,10 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
             <button
               onClick={() => setModalCsvAbierto(true)}
               data-testid="boton-importar-csv"
-              title="Importar CSV del banco"
+              title="Importar extracto del banco (CSV, XLSX, PDF o TXT)"
               className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-amber-400 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all"
             >
-              <Upload className="w-4 h-4" /> Importar CSV
+              <Upload className="w-4 h-4" /> Importar Extracto
             </button>
             <button
               onClick={exportarCSV}

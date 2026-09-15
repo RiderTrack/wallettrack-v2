@@ -30,6 +30,7 @@
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.2",
     "lucide-react": "^0.546.0",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3"

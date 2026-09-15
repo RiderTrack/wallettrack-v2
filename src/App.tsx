@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🚀 APP — WalletTrack V2 (F9 · IMPORTAR CSV)
+// 🚀 APP — WalletTrack V2 (F9.1 · IMPORTAR MULTI-FORMATO)
 // Arquitectura gemela de FitTrack V2:
 //   • Navegación por vista activa (activeView) — sin router
 //   • ☰ Menú hamburguesa (NavDrawer) con TODAS las secciones
@@ -30,6 +30,13 @@
 //     categorías, dedupe por fecha+monto+descripción. Parser
 //     CSV a mano (sin deps externas) que funciona con cualquier
 //     banco (BCP, Interbank, BBVA, Yape, Plin).
+//   • F9.1: 📦 multi-formato — ahora también XLSX (exceljs, lazy,
+//     mismo chunk del export de F3), PDF (pdfjs-dist, lazy, con
+//     worker inline offline) y TXT. Detección endurecida para los
+//     headers reales del BCP ("Fecha de operación" y "N° de
+//     operación" ya no se confunden con el tipo) y soporte para
+//     Cargo/Abono separados. Montos contables (50.00-) y fechas
+//     sin año (PDFs).
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -325,7 +332,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F9</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F9.1</p>
       </div>
     );
   }
@@ -388,7 +395,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F9 · IMPORT CSV
+            F9.1 · MULTI-FORMATO
           </span>
           <button
             onClick={() => setStudioAbierto(true)}

@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F9 · Importar CSV';
+  return 'F9.1 · Importar Extracto (CSV/XLSX/PDF)';
 }

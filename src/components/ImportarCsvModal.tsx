@@ -1,19 +1,19 @@
 // ═══════════════════════════════════════════════════════════
-// 📥 MODAL IMPORTAR CSV — WalletTrack V2 (F9 · EXTRACTOS)
-// Modal de 3 pasos para importar movimientos desde un CSV del
-// banco:
+// 📥 MODAL IMPORTAR EXTRACTO — WalletTrack V2 (F9.1 · MULTI-FORMATO)
+// Modal de 3 pasos para importar movimientos desde un extracto
+// del banco (CSV · TXT · XLSX · PDF):
 //   Paso 1: Elegir archivo + cuenta destino
 //   Paso 2: Mapear columnas (detección automática + editable)
 //   Paso 3: Revisar, categorizar y importar
 // ═══════════════════════════════════════════════════════════
 
 import React, { useState, useRef } from 'react';
-import { X, Upload, FileText, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { X, Upload, FileText, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import type { EstadoWallet } from '../types';
 import { todasLasCuentas, CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT } from '../data/catalogos';
 import { soles } from '../services/dinero';
 import {
-  parsearCsv, detectarColumnas, mapearFilas, importarTransaccionesMasivas,
+  leerArchivoBancario, detectarColumnas, mapearFilas, importarTransaccionesMasivas,
   type CsvCrudo, ColumnasDetectadas, MovimientoCsv, ResultadoImportacion,
 } from '../services/importarCsv';
 
@@ -30,8 +30,8 @@ export const ImportarCsvModal: React.FC<ImportarCsvModalProps> = ({
   abierto, estado, onCerrar, onImportar,
 }) => {
   const [paso, setPaso] = useState<Paso>(1);
-  const [csvTexto, setCsvTexto] = useState<string>('');
   const [nombreArchivo, setNombreArchivo] = useState<string>('');
+  const [leyendo, setLeyendo] = useState(false);
   const [cuentaId, setCuentaId] = useState<string>('bcp');
   const [csv, setCsv] = useState<CsvCrudo | null>(null);
   const [columnas, setColumnas] = useState<ColumnasDetectadas | null>(null);
@@ -41,12 +41,25 @@ export const ImportarCsvModal: React.FC<ImportarCsvModalProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const cuentas = todasLasCuentas(estado);
-  const todasCategorias = [...CATS_GASTO_DEFAULT, ...CATS_INGRESO_DEFAULT];
+  // F9.1 · FIX categoría sugerida: el diccionario puede devolver
+  // 'Transferencia' (YAPE/PLIN) que NO vive en las listas de gasto/
+  // ingreso — sin esa opción en el select, el navegador caía
+  // silenciosamente a "Hogar" y el movimiento se importaba mal.
+  // También se suman las categorías propias del usuario (F5).
+  const CATS_ESPECIALES_IMPORT = [
+    { id: 'transferencia', emoji: '💸', nombre: 'Transferencia' },
+    { id: 'ahorro', emoji: '🎯', nombre: 'Ahorro' },
+  ];
+  const todasCategorias = [
+    ...CATS_GASTO_DEFAULT, ...estado.categoriasGasto,
+    ...CATS_ESPECIALES_IMPORT,
+    ...CATS_INGRESO_DEFAULT, ...estado.categoriasIngreso,
+  ];
 
   const reset = () => {
     setPaso(1);
-    setCsvTexto('');
     setNombreArchivo('');
+    setLeyendo(false);
     setCsv(null);
     setColumnas(null);
     setMovs([]);
@@ -59,21 +72,22 @@ export const ImportarCsvModal: React.FC<ImportarCsvModalProps> = ({
     onCerrar();
   };
 
-  // ── Paso 1 → 2: leer archivo y parsear ──
+  // ── Paso 1 → 2: leer archivo (CSV/TXT/XLSX/PDF) y parsear ──
   const alElegirArchivo = async (file: File) => {
     setNombreArchivo(file.name);
-    const texto = await file.text();
-    setCsvTexto(texto);
-    const parsed = parsearCsv(texto);
-    if (parsed.headers.length === 0) {
-      setError('El CSV está vacío o no se pudo leer');
-      return;
-    }
-    setCsv(parsed);
-    const det = detectarColumnas(parsed.headers);
-    setColumnas(det);
+    setLeyendo(true);
     setError('');
-    setPaso(2);
+    try {
+      const leido = await leerArchivoBancario(file);
+      if (leido.headers.length === 0) throw new Error('El archivo está vacío o no se pudo leer');
+      setCsv(leido);
+      setColumnas(detectarColumnas(leido.headers));
+      setPaso(2);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo leer el archivo');
+    } finally {
+      setLeyendo(false);
+    }
   };
 
   // ── Paso 2 → 3: mapear filas con las columnas detectadas ──
@@ -123,7 +137,7 @@ export const ImportarCsvModal: React.FC<ImportarCsvModalProps> = ({
             <Upload className="w-5 h-5" />
           </div>
           <div className="flex-1">
-            <h3 className="text-base font-black text-white">Importar CSV del banco</h3>
+            <h3 className="text-base font-black text-white">Importar extracto del banco</h3>
             <p className="text-[11px] text-slate-400">
               Paso {paso} de 3 · {paso === 1 ? 'Elegir archivo y cuenta' : paso === 2 ? 'Mapear columnas' : 'Revisar e importar'}
             </p>
@@ -161,36 +175,41 @@ export const ImportarCsvModal: React.FC<ImportarCsvModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-400 mb-1.5">Archivo CSV</label>
+              <label className="block text-xs font-bold text-slate-400 mb-1.5">Archivo del banco</label>
               <button
                 onClick={() => inputRef.current?.click()}
+                disabled={leyendo}
                 data-testid="boton-elegir-csv"
-                className="w-full py-6 rounded-xl border-2 border-dashed border-slate-600 hover:border-emerald-500/60 hover:bg-emerald-500/5 text-slate-400 hover:text-emerald-400 text-xs font-bold flex flex-col items-center justify-center gap-2 transition-all"
+                className="w-full py-6 rounded-xl border-2 border-dashed border-slate-600 hover:border-emerald-500/60 hover:bg-emerald-500/5 text-slate-400 hover:text-emerald-400 text-xs font-bold flex flex-col items-center justify-center gap-2 transition-all disabled:opacity-60"
               >
-                <FileText className="w-7 h-7" />
-                {nombreArchivo ? (
+                {leyendo ? <Loader2 className="w-7 h-7 animate-spin" /> : <FileText className="w-7 h-7" />}
+                {leyendo ? (
+                  <span className="text-emerald-400">Leyendo archivo…</span>
+                ) : nombreArchivo ? (
                   <span className="text-emerald-400">{nombreArchivo}</span>
                 ) : (
-                  <span>Tocá para elegir el CSV del banco</span>
+                  <span>Tocá para elegir el extracto del banco</span>
                 )}
               </button>
               <input
                 ref={inputRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.txt,.xlsx,.pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) void alElegirArchivo(f);
                 }}
                 className="hidden"
               />
+              <p className="text-[10px] text-slate-500 mt-1.5">Formatos: CSV · TXT · XLSX · PDF</p>
             </div>
 
             <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
               <p className="text-[10px] text-slate-400 leading-relaxed">
-                💡 <strong className="text-slate-300">Cómo bajar el CSV:</strong> Entrá a la web o app de tu banco,
-                buscá "Movimientos" o "Extracto", elegí el período y descargá en formato CSV o Excel.
-                El importador detecta las columnas automáticamente (fecha, descripción, monto, tipo).
+                💡 <strong className="text-slate-300">Cómo bajar el extracto (BCP):</strong> entrá a la app o web BCP →
+                Movimientos / Consulta de movimientos → elegí el período → <strong className="text-slate-300">Descargar XLSX o CSV</strong>.
+                También sirve el PDF del estado de cuenta (sin contraseña y que no sea un escaneo).
+                Las columnas se detectan automáticamente.
               </p>
             </div>
 
