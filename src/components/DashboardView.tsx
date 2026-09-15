@@ -7,12 +7,14 @@
 // ═══════════════════════════════════════════════════════════
 
 import React from 'react';
-import { TrendingUp, TrendingDown, PlusCircle, MinusCircle, ArrowRight, Zap, Wallet, ArrowLeftRight, Bot } from 'lucide-react';
+import { TrendingUp, TrendingDown, PlusCircle, MinusCircle, ArrowRight, Zap, Wallet, ArrowLeftRight, Bot, CreditCard } from 'lucide-react';
 import type { EstadoWallet, VistaApp } from '../types';
 import { todasLasCuentas } from '../data/catalogos';
 import { soles, fechaCorta, nombreMesActual } from '../services/dinero';
 import { saldoCuenta, saldoTotal, resumenMes, movimientosDeCuenta } from '../services/estado';
 import { analizarWallet, COLOR_MAP } from '../services/walletbot';
+import { esAPK } from '../services/platform';
+import { leerPrefsCaptura, calcularSaldoVivo, leerLogCaptura } from '../services/captura';
 
 interface DashboardViewProps {
   estado: EstadoWallet;
@@ -108,6 +110,63 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ estado, onRegistra
           ))}
         </div>
       </section>
+
+      {/* ── F10 · 💳 Saldo Vivo (espejo de la cuenta con capturas) ── */}
+      {esAPK() && (() => {
+        const prefs = leerPrefsCaptura();
+        const sv = prefs.saldoVivo;
+        if (!sv?.activo) return null;
+        const cta = todasLasCuentas(estado).find((c) => c.id === sv.cuenta);
+        const saldo = calcularSaldoVivo(estado, sv);
+        const ultimas = leerLogCaptura();
+        const ultima = ultimas.length > 0 ? ultimas[0].ts : null;
+        const hace = (ts: number | null): string => {
+          if (!ts) return 'sin capturas aún';
+          const min = Math.floor((Date.now() - ts) / 60000);
+          if (min < 1) return 'captura hace instantes';
+          if (min < 60) return `captura hace ${min} min`;
+          if (min < 1440) return `captura hace ${Math.floor(min / 60)} h`;
+          return 'captura hace más de un día';
+        };
+        return (
+          <section
+            data-testid="tarjeta-saldo-vivo"
+            className="rounded-3xl bg-slate-900 border border-sky-500/25 p-5 relative overflow-hidden"
+          >
+            <div className="absolute -right-16 -top-16 w-40 h-40 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
+            <div className="flex items-center justify-between mb-2 relative">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-xl bg-sky-500/15 text-sky-400 border border-sky-500/20 shrink-0">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 truncate">
+                    Saldo Vivo {cta ? `${cta.icon} ${cta.name}` : ''}
+                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-sky-500/20 text-sky-300 font-bold uppercase">en vivo</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Espejo desde {sv.desde} · {hace(ultima)}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onIr('config')}
+                className="text-xs text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1 shrink-0"
+              >
+                Ajustes <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="flex items-end justify-between relative">
+              <p data-testid="saldo-vivo-dashboard" className="text-3xl font-black tracking-tight text-sky-300">
+                {soles(saldo)}
+              </p>
+              <p className="text-[10px] text-slate-500 text-right max-w-[45%]">
+                Inicial {soles(sv.saldoInicial)} + todos los movimientos registrados desde {sv.desde}
+              </p>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ── Mis Cuentas (strip) ────────────────────────────────── */}
       <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-4">

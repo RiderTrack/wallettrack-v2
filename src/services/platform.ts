@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F9.1 · Importar Extracto (CSV/XLSX/PDF)';
+  return 'F10 · Captura Automática (notificaciones bancarias)';
 }

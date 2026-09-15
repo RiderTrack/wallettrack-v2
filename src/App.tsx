@@ -37,6 +37,14 @@
 //     operación" ya no se confunden con el tipo) y soporte para
 //     Cargo/Abono separados. Montos contables (50.00-) y fechas
 //     sin año (PDFs).
+//   • F10: 🔔 captura automática — el lector de notificaciones
+//     bancarias (BCP, Yape, Interbank, BBVA, Scotiabank…).
+//     Cada aviso de compra o abono se convierte en transacción
+//     en segundos, con la categoría del diccionario de F9 y el
+//     dedupe anti-doble. PRIVACÍA: filtro de apps en el lado
+//     nativo (solo las elegidas se leen) y buffer 100% local.
+//     Además 💳 Saldo Vivo: espejo de la cuenta con fecha de
+//     corte, y modo automático o de revisión.
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -225,6 +233,27 @@ export default function App() {
     return () => { if (debounceBot.current) clearTimeout(debounceBot.current); };
   }, [estado]);
 
+  // F10 · 🔔 Captura automática (solo APK): drena el buffer nativo
+  // (capturas que llegaron con la app cerrada) y escucha el evento
+  // en vivo wtCapture → cada notificación bancaria se convierte en
+  // transacción. Si la app estaba cerrada, al abrirla se ponen al
+  // día todas. El estado nuevo se aplica igual que un cambio manual
+  // (persiste + sincroniza + bot re-analiza).
+  useEffect(() => {
+    if (!esAPK()) return;
+    let limpiar: (() => void) | undefined;
+    let cancelado = false;
+    void (async () => {
+      try {
+        const { iniciarCaptura } = await import('./services/captura');
+        if (cancelado) return;
+        limpiar = await iniciarCaptura(aplicar, mostrarToast);
+      } catch { /* plugin nativo no disponible (web) */ }
+    })();
+    return () => { cancelado = true; limpiar?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // F1: salir — cierra sesión Firebase (y Google nativo en APK) o
   // vuelve del modo local; siempre regresa al LoginScreen.
   const salir = async () => {
@@ -332,7 +361,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F9.1</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F10</p>
       </div>
     );
   }
@@ -395,7 +424,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F9.1 · MULTI-FORMATO
+            F10 · CAPTURA AUTO
           </span>
           <button
             onClick={() => setStudioAbierto(true)}
@@ -503,6 +532,7 @@ export default function App() {
             onImportar={importar}
             onIniciarSesion={() => { marcarModoLocal(false); setModoLocal(false); }}
             onAbrirStudio={() => setStudioAbierto(true)}
+            onAplicar={aplicar}
             onToast={mostrarToast}
           />
         )}

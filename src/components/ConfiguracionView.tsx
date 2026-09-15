@@ -36,6 +36,7 @@ import {
   leerPrefsBot, guardarPrefsBot, probarBotProactivo, diagnosticarBot, reiniciarDedupe,
 } from '../services/botproactivo';
 import type { FrecuenciaBot } from '../types';
+import { CapturaAutoCard } from './CapturaAutoCard';
 import { compartirArchivo, nombreRespaldo } from '../services/archivo';
 import { leerTema } from '../services/tema';
 import type { CuentaUsuario } from '../hooks/useAuth';
@@ -47,11 +48,12 @@ interface ConfiguracionViewProps {
   onImportar: (textoJSON: string) => boolean; // true si ok
   onIniciarSesion: () => void;    // F1: salir del modo local → LoginScreen
   onAbrirStudio?: () => void;     // F4: abrir el Theme Studio (🎨 del header)
+  onAplicar: (e: EstadoWallet) => void; // F10: capturas → transacciones
   onToast: (mensaje: string) => void;
 }
 
 export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
-  estado, cuenta, modoLocal, onImportar, onIniciarSesion, onAbrirStudio, onToast,
+  estado, cuenta, modoLocal, onImportar, onIniciarSesion, onAbrirStudio, onAplicar, onToast,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [confirmandoImport, setConfirmandoImport] = useState(false);
@@ -843,6 +845,9 @@ export const ConfiguracionView: React.FC<ConfiguracionViewProps> = ({
           </button>
         </div>
       </section>
+
+      {/* ── 🔔 Captura Automática (F10) ─────────────────────── */}
+      <CapturaAutoCard estado={estado} onAplicar={onAplicar} onToast={onToast} />
 
       {/* ── Respaldo ───────────────────────────────────────────── */}
       <section className="rounded-3xl bg-slate-900 border border-slate-700/80 p-5">
