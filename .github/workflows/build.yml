@@ -24,8 +24,25 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # ── Android SDK ──
+      # El runner ubuntu-latest ya trae el Android SDK pre-instalado
+      # en ANDROID_HOME (/usr/local/lib/android/sdk). La action
+      # android-actions/setup-android@v3 rompe porque intenta
+      # instalar el paquete 'tools' que Google eliminó del repo
+      # oficial. Solo verificamos que esté presente.
+      - name: Verify Android SDK (pre-installed on runner)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          if [ -z "$ANDROID_HOME" ] || [ ! -d "$ANDROID_HOME" ]; then
+            echo "❌ Android SDK no encontrado en el runner"
+            exit 1
+          fi
+          echo "✅ Android SDK presente: $ANDROID_HOME"
+          ls "$ANDROID_HOME" | head -10
+          # Asegurar build-tools y platform-tools (vienen pre-instalados)
+          ls "$ANDROID_HOME/build-tools" 2>/dev/null | head -3 || echo "⚠️ sin build-tools"
+          ls "$ANDROID_HOME/platform-tools" 2>/dev/null | head -3 || echo "⚠️ sin platform-tools"
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
