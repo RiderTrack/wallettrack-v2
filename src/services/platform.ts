@@ -22,5 +22,5 @@ export function nombrePlataforma(): string {
 }
 
 export function versionApp(): string {
-  return 'F8 · Sankey de Flujo';
+  return 'F9 · Importar CSV';
 }

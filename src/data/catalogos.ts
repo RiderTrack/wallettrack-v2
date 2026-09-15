@@ -83,3 +83,112 @@ export const GASTOS_RAPIDOS_DEFAULT: GastoRapido[] = [
   { id: 'gr_gasolina', emoji: '⛽', nombre: 'Gasolina', monto: 20, categoria: 'Combustible',  cuenta: 'efectivo' },
   { id: 'gr_menu',     emoji: '🍔', nombre: 'Menú',     monto: 12, categoria: 'Alimentación', cuenta: 'efectivo' },
 ];
+
+// ═══════════════════════════════════════════════════════════
+// F9 · DICCIONARIO DE CATEGORÍAS — para importación de CSV
+// Mapea palabras clave (UPPERCASE) encontradas en la descripción
+// del movimiento a su categoría. La detección es insensible a
+// mayúsculas y busca la palabra como subcadena. Si no matchea
+// nada, la categoría queda como 'Otros'. El usuario puede editar
+// la categoría de cada fila antes de importar.
+// ═══════════════════════════════════════════════════════════
+
+/** { palabraClave: nombre de categoría (debe existir en CATS_GASTO_DEFAULT o CATS_INGRESO_DEFAULT) } */
+export const DICCIONARIO_CATEGORIAS: Record<string, string> = {
+  // ── Transporte ──
+  UBER: 'Transporte',
+  CABIFY: 'Transporte',
+  DIDIMO: 'Transporte',
+  BEAT: 'Transporte',
+  TAXI: 'Transporte',
+  METRO: 'Transporte',
+  BUS: 'Transporte',
+  // ── Combustible ──
+  PRIMAX: 'Combustible',
+  REPSOL: 'Combustible',
+  PECSA: 'Combustible',
+  GASOLINA: 'Combustible',
+  COMBUSTIBLE: 'Combustible',
+  GRIFERO: 'Combustible',
+  // ── Alimentación ──
+  SUPER: 'Alimentación',
+  'PLAZA VEA': 'Alimentación',
+  TOTTUS: 'Alimentación',
+  VIVANDA: 'Alimentación',
+  WONG: 'Alimentación',
+  MAKRO: 'Alimentación',
+  RESTAURANT: 'Alimentación',
+  MENU: 'Alimentación',
+  ALMUERZO: 'Alimentación',
+  // ── Entretenimiento ──
+  NETFLIX: 'Entretenimiento',
+  SPOTIFY: 'Entretenimiento',
+  DISNEY: 'Entretenimiento',
+  HBO: 'Entretenimiento',
+  'AMAZON PRIME': 'Entretenimiento',
+  'YOUTUBE PREMIUM': 'Entretenimiento',
+  CINE: 'Entretenimiento',
+  // ── Delivery ──
+  RAPPY: 'Alimentación',
+  PEDIDOSYA: 'Alimentación',
+  UBEREATS: 'Alimentación',
+  'DIDI FOOD': 'Alimentación',
+  // ── Tecnología ──
+  CLARO: 'Tecnología',
+  MOVISTAR: 'Tecnología',
+  ENTEL: 'Tecnología',
+  BITEL: 'Tecnología',
+  INTERNET: 'Tecnología',
+  RECARGA: 'Tecnología',
+  // ── Hogar ──
+  LUZ: 'Hogar',
+  AGUA: 'Hogar',
+  GAS: 'Hogar',
+  ELECTRICIDAD: 'Hogar',
+  ALQUILER: 'Hogar',
+  RENTA: 'Hogar',
+  // ── Salud ──
+  FARMACIA: 'Salud',
+  BOTICA: 'Salud',
+  INKAFARMA: 'Salud',
+  MIFARMA: 'Salud',
+  CLINICA: 'Salud',
+  HOSPITAL: 'Salud',
+  MEDICO: 'Salud',
+  // ── Compras ──
+  'MERCADO LIBRE': 'Compras',
+  MERCADOLIBRE: 'Compras',
+  ALIEXPRESS: 'Compras',
+  AMAZON: 'Compras',
+  RIPLEY: 'Compras',
+  SAGA: 'Compras',
+  OECHSLLE: 'Compras',
+  // ── Gimnasio ──
+  GIMNASIO: 'Gimnasio',
+  'SMART FIT': 'Gimnasio',
+  "GOLD'S": 'Gimnasio',
+  // ── Ingresos (categorías de CATS_INGRESO_DEFAULT) ──
+  SUELDO: 'Trabajo Principal',
+  HABERES: 'Trabajo Principal',
+  PLANILLA: 'Trabajo Principal',
+  ABONO: 'Trabajo Principal',
+  // ── Transferencias (no se categorizan como gasto ni ingreso — se marcan como 'Transferencia') ──
+  YAPE: 'Transferencia',
+  PLIN: 'Transferencia',
+  TRANSFERENCIA: 'Transferencia',
+};
+
+/**
+ * Detecta la categoría de una descripción usando el diccionario.
+ * Devuelve el nombre de la categoría o 'Otros' si no matchea.
+ * Es insensible a mayúsculas. Recorre el diccionario en orden y
+ * devuelve el primer match (el orden del diccionario importa: las
+ * palabras más específicas van primero).
+ */
+export function detectarCategoria(descripcion: string): string {
+  const desc = (descripcion || '').toUpperCase();
+  for (const [clave, cat] of Object.entries(DICCIONARIO_CATEGORIAS)) {
+    if (desc.includes(clave)) return cat;
+  }
+  return 'Otros';
+}

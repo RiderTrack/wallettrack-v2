@@ -57,12 +57,12 @@ jobs:
       - name: Copy google-services.json
         run: cp google-services.json android/app/google-services.json
 
-      - name: F8 · Versionar APK (versionCode 10 · versionName 1.8.0)
+      - name: F9 · Versionar APK (versionCode 11 · versionName 1.9.0)
         run: |
           GRADLE="android/app/build.gradle"
-          sed -i 's/versionCode 1/versionCode 10/' "$GRADLE"
-          sed -i 's/versionName "1.0"/versionName "1.8.0"/' "$GRADLE"
-          echo "✅ versionCode 10 · versionName 1.8.0"
+          sed -i 's/versionCode 1/versionCode 11/' "$GRADLE"
+          sed -i 's/versionName "1.0"/versionName "1.9.0"/' "$GRADLE"
+          echo "✅ versionCode 11 · versionName 1.9.0"
           grep -E "versionCode|versionName" "$GRADLE" || true
 
       # ── F1.1 · GOOGLE LOGIN (patrón exacto del FitTrack V2) ────
@@ -236,14 +236,14 @@ jobs:
           KEY_PASS="${{ secrets.KEY_PASSWORD }}"
           if [ -z "$STORE_PASS" ]; then STORE_PASS="wallettrack123"; echo "⚠️ STORE_PASSWORD no configurado — usando clave temporal del viejo"; fi
           if [ -z "$KEY_PASS" ]; then KEY_PASS="wallettrack123"; echo "⚠️ KEY_PASSWORD no configurado — usando clave temporal del viejo"; fi
-          $APKSIGNER sign --ks release.keystore --ks-key-alias wallettrack --ks-pass "pass:$STORE_PASS" --key-pass "pass:$KEY_PASS" --out WalletTrack-V2-F8.apk WalletTrack-aligned.apk
+          $APKSIGNER sign --ks release.keystore --ks-key-alias wallettrack --ks-pass "pass:$STORE_PASS" --key-pass "pass:$KEY_PASS" --out WalletTrack-V2-F9.apk WalletTrack-aligned.apk
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: WalletTrack-V2-APK
-          path: WalletTrack-V2-F8.apk
+          path: WalletTrack-V2-F9.apk
           retention-days: 30
 
       - name: Show APK info
-        run: du -sh WalletTrack-V2-F8.apk
+        run: du -sh WalletTrack-V2-F9.apk

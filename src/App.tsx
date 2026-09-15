@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🚀 APP — WalletTrack V2 (F8 · SANKEY DE FLUJO)
+// 🚀 APP — WalletTrack V2 (F9 · IMPORTAR CSV)
 // Arquitectura gemela de FitTrack V2:
 //   • Navegación por vista activa (activeView) — sin router
 //   • ☰ Menú hamburguesa (NavDrawer) con TODAS las secciones
@@ -22,9 +22,14 @@
 //     dedupe por día y horario silencioso 22:00–7:00.
 //   • F8: 🌊 Sankey de flujo de dinero en Estadísticas —
 //     visualización SVG pura que muestra a dónde va cada sol de
-//     los ingresos del mes: top 5 categorías + Otros, sobres,
-//     metas y saldo restante. Paths Bézier con grosor proporcional,
+//     los ingresos del mes. Paths Bézier con grosor proporcional,
 //     hover para resaltar. Mismo ADN de las gráficas de F3.
+//   • F9: 📥 Importar CSV del banco — modal de 3 pasos (elegir
+//     archivo+cuenta → mapear columnas → revisar+categorizar+
+//     importar) con detección automática de columnas y
+//     categorías, dedupe por fecha+monto+descripción. Parser
+//     CSV a mano (sin deps externas) que funciona con cualquier
+//     banco (BCP, Interbank, BBVA, Yape, Plin).
 // ═══════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -320,7 +325,7 @@ export default function App() {
         <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-2xl animate-pulse">
           <Wallet className="w-8 h-8 text-white" />
         </div>
-        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F8</p>
+        <p className="text-slate-400 text-sm font-mono">WalletTrack V2 · F9</p>
       </div>
     );
   }
@@ -383,7 +388,7 @@ export default function App() {
             data-testid="badge-fase"
             className="ml-auto text-[10px] font-mono tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shrink-0"
           >
-            F8 · SANKEY
+            F9 · IMPORT CSV
           </span>
           <button
             onClick={() => setStudioAbierto(true)}

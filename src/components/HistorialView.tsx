@@ -6,7 +6,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import React, { useMemo, useState } from 'react';
-import { Search, Trash2, FileSpreadsheet, FileJson, Paperclip } from 'lucide-react';
+import { Search, Trash2, FileSpreadsheet, FileJson, Paperclip, Upload } from 'lucide-react';
 import type { EstadoWallet, Transaccion } from '../types';
 import { todasLasCuentas, CATS_GASTO_DEFAULT, CATS_INGRESO_DEFAULT } from '../data/catalogos';
 import { soles, fechaCorta } from '../services/dinero';
@@ -14,6 +14,8 @@ import { filtrarTransacciones } from '../services/estado';
 import { transaccionesACSV } from '../services/archivo';
 import { RecurrentesCard } from './RecurrentesCard';
 import { ComprobanteViewer } from './ComprobanteViewer';
+import { ImportarCsvModal } from './ImportarCsvModal';
+import type { ResultadoImportacion } from '../services/importarCsv';
 
 interface HistorialViewProps {
   estado: EstadoWallet;
@@ -30,6 +32,8 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
   // F6 · viewer de comprobante
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerDesc, setViewerDesc] = useState<string>('');
+  // F9 · modal de importar CSV
+  const [modalCsvAbierto, setModalCsvAbierto] = useState(false);
 
   const todasCategorias = useMemo(
     () => [...CATS_GASTO_DEFAULT, ...CATS_INGRESO_DEFAULT, ...estado.categoriasGasto, ...estado.categoriasIngreso],
@@ -82,6 +86,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
             <p className="text-slate-400 text-xs mt-0.5">Gestiona, filtra y exporta tus ingresos y egresos.</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setModalCsvAbierto(true)}
+              data-testid="boton-importar-csv"
+              title="Importar CSV del banco"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-amber-400 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all"
+            >
+              <Upload className="w-4 h-4" /> Importar CSV
+            </button>
             <button
               onClick={exportarCSV}
               data-testid="boton-exportar-csv"
@@ -267,6 +279,26 @@ export const HistorialView: React.FC<HistorialViewProps> = ({ estado, onEliminar
         src={viewerSrc}
         descripcion={viewerDesc}
         onCerrar={() => { setViewerSrc(null); setViewerDesc(''); }}
+      />
+
+      {/* F9 · Modal de importar CSV */}
+      <ImportarCsvModal
+        abierto={modalCsvAbierto}
+        estado={estado}
+        onCerrar={() => setModalCsvAbierto(false)}
+        onImportar={(nuevoEstado, resultado) => {
+          onAplicar(nuevoEstado);
+          setModalCsvAbierto(false);
+          const { importados, salteados, totalGastos, totalIngresos } = resultado;
+          let msg = `✅ ${importados} movimiento${importados === 1 ? '' : 's'} importado${importados === 1 ? '' : 's'}`;
+          if (totalGastos > 0 || totalIngresos > 0) {
+            msg += ` · S/ ${totalGastos.toFixed(0)} gastos · S/ ${totalIngresos.toFixed(0)} ingresos`;
+          }
+          if (salteados > 0) {
+            msg += ` · ⚠️ ${salteados} salteado${salteados === 1 ? '' : 's'} (duplicado${salteados === 1 ? '' : 's'})`;
+          }
+          onToast(msg);
+        }}
       />
     </div>
   );
