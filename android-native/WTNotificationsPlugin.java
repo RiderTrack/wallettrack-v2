@@ -193,8 +193,9 @@ public class WTNotificationsPlugin extends Plugin {
             String raw = Settings.Secure.getString(
                     ctx.getContentResolver(), "enabled_notification_listeners");
             if (raw == null || raw.isEmpty()) return false;
-            String yo = ComponentName.unflattenToString(
-                    new ComponentName(ctx, WTCaptureService.class));
+            // Mismo formato con el que Android guarda la lista:
+            // "com.wallettrack.app/com.wallettrack.app.WTCaptureService"
+            String yo = new ComponentName(ctx, WTCaptureService.class).flattenToString();
             String[] partes = raw.split(":");
             for (String parte : partes) {
                 if (parte.equals(yo)) return true;
