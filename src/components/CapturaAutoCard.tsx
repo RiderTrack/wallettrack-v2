@@ -448,6 +448,9 @@ export const CapturaAutoCard: React.FC<CapturaAutoCardProps> = ({ estado, onApli
                         {l.parse.direccion === 'income' ? 'Ingreso' : 'Gasto'} de {soles(l.parse.monto)} → {l.parse.categoria}
                       </p>
                     )}
+                    {l.nota && (
+                      <p className="text-[10px] text-amber-400/90 mt-1 leading-snug">Posible doble aviso — {l.nota}</p>
+                    )}
                     {l.estado === 'revision' && (
                       <div className="flex gap-1.5 mt-2">
                         <button

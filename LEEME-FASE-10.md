@@ -44,8 +44,8 @@
 |---|---|
 | `android-native/WTCaptureService.java` | **NUEVO** · `NotificationListenerService` que escucha las notificaciones. Filtra por allowlist ANTES de leer nada (privacidad en la fuente), extrae título/texto/bigText, dedupe de ráfaga (<2.5s), guarda en buffer local jsonl (cap 400) y avisa a la WebView si está viva. |
 | `android-native/WTNotificationsPlugin.java` | **NUEVO** · Puente Capacitor con los métodos que llama el JS: `checkAccess`, `openAccessSettings`, `setConfig`/`getConfig` (allowlist en SharedPreferences), `getBuffer(since)`, `clearBuffer`, `addTestCapture` (botón Probar) y `listFinanceApps` (apps instaladas de una lista conocida, con `<queries>` del manifest). |
-| `src/services/captura.ts` | **NUEVO** · El cerebro TS: parser de capturas (monto con símbolo S///USD/$, dirección gasto/ingreso con keywords, descripción limpia), pipeline captura→transacción reutilizando `agregarTransaccion` + diccionario de F9, dedupe doble (id pkg@ts + contenido en 2 min), modo auto/revisión, log persistente de capturas, saldo vivo, prefs. Puente al plugin nativo lazy (en web nunca se carga). |
-| `src/components/CapturaAutoCard.tsx` | **NUEVO** · Tarjeta de Ajustes: permiso con estado en vivo, picker de apps (5 presets + custom por package), cuenta destino por app, modo automático/revisión, saldo vivo (cuenta/fecha/monto inicial), log con últimas capturas y botones Registrar/Ignorar para las que quedaron en revisión, Probar captura y Limpiar. |
+| `src/services/captura.ts` | **NUEVO** · El cerebro TS: parser de capturas (monto con símbolo S///USD/$, dirección gasto/ingreso con keywords, descripción limpia), pipeline captura→transacción reutilizando `agregarTransaccion` + diccionario de F9, dedupe doble (id pkg@ts + contenido en 2 min) + **guarda Yape↔banco** (mismo monto y dirección de OTRA app <3 min → va a revisión con nota, nunca duplica en silencio ni descarta), modo auto/revisión, log persistente de capturas, saldo vivo, prefs. Puente al plugin nativo lazy (en web nunca se carga). |
+| `src/components/CapturaAutoCard.tsx` | **NUEVO** · Tarjeta de Ajustes: permiso con estado en vivo, picker de apps (5 presets + custom por package), cuenta destino por app, modo automático/revisión, saldo vivo (cuenta/fecha/monto inicial), log con últimas capturas y botones Registrar/Ignorar para las que quedaron en revisión (con nota ámbar para posibles dobles avisos Yape+banco), Probar captura y Limpiar. |
 | `src/components/ConfiguracionView.tsx` | Parche · Import de la tarjeta nueva + prop `onAplicar` + render de `CapturaAutoCard` después de la del bot proactivo. |
 | `src/components/DashboardView.tsx` | Parche · Tarjeta 💳 **Saldo Vivo** arriba de Mis Cuentas (solo APK y si está activado): monto vivo, desde qué fecha, hace cuánto la última captura, botón a Ajustes. |
 | `src/App.tsx` | Parche · `useEffect` F10 (solo APK): drena el buffer al arrancar + evento en vivo `wtCapture` + re-drenaje al volver al frente; pasa `onAplicar` a Configuración; badge `F10 · CAPTURA AUTO`; comentarios. |
@@ -70,6 +70,10 @@ WalletTrack** (las prefs de F10 usan claves propias: `wallettrack_v2_captura` y
       del BCP que pasa por TODO el pipeline real — después podés borrarla).
 - [ ] Pagá algo real con la tarjeta (un menu, la gasolina) → en segundos/minutos tiene
       que caer solo. Mirá también el **log de capturas** en Ajustes.
+- [ ] **Probá Yape**: yapeá S/ 1 a alguien (o pedí que te yapeen) → cae solo en segundos
+      en la cuenta Yape, como gasto o ingreso. Si el mismo pago avisan DOS apps (la de
+      Yape y la del banco), el segundo aviso queda "en revisión" con una nota ámbar:
+      **Ignorar** si es el mismo pago, **Registrar** si eran pagos distintos.
 - [ ] Modo **👀 Revisar antes**: las capturas NO se registran solas — quedan con badge
       "revisar" y botones **Registrar / Ignorar**.
 - [ ] **💳 Saldo Vivo**: activá, poné tu saldo real de hoy → la tarjeta aparece en el
@@ -88,6 +92,10 @@ WalletTrack** (las prefs de F10 usan claves propias: `wallettrack_v2_captura` y
 - Algunos fabricantes (Xiaomi, Huawei) matan servicios en segundo plano: si dejara de
   capturar, verificá que el acceso a notificaciones siga activo y que la batería no
   esté "optimizando" a WalletTrack.
+- Un mismo pago con Yape a veces lo avisan DOS apps a la vez (la app Yape y la app del
+  banco): el segundo aviso NO se duplica — queda en revisión con nota para que decidas
+  con 1 toque (Ignorar si es el mismo pago). Si eran dos pagos distintos con el mismo
+  monto a menos de 3 minutos, tocá Registrar y quedan los dos.
 - Las notificaciones que el banco envía sin monto (p.ej. "Ingreso a la app desde un
   nuevo dispositivo") van a la cola de revisión para que vos decidas.
 
@@ -95,7 +103,8 @@ WalletTrack** (las prefs de F10 usan claves propias: `wallettrack_v2_captura` y
 
 - `tsc --noEmit` → **0 errores**
 - `vite build` → **14.01s** (bundle principal SIN cambios — F10 no agrega deps)
-- **Smoke F10 nuevo: 74/74**
+- **Smoke F10 nuevo: 80/80** (incluye el guarda Yape↔banco: doble aviso del mismo pago
+  por 2 apps, pagos distintos con el mismo monto, ventana de 3 min, mismo lote)
 - Regresiones: F9 **41/41** · F9.1 **74/74** · F6 **20/20** · F7 **23/23** · F8 **25/25**
 - CI: run en GitHub Actions → APK firmada `WalletTrack-V2-F10.apk`
   (login Google, google-services, SHA-1 y keystore estables · versión 13/1.10.0)

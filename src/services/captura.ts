@@ -62,6 +62,7 @@ export interface LogCaptura {
   title: string;
   text: string;
   estado: 'importada' | 'revision' | 'ignorada';
+  nota?: string;            // aviso al usuario (p.ej. posible doble aviso de 2 apps)
   parse?: { monto: number; direccion: 'income' | 'expense'; descripcion: string; categoria: string };
   txId?: string;          // id de la transacción creada
 }
@@ -281,6 +282,13 @@ export function idCaptura(c: CapturaNotif): string {
 const recientes = new Map<string, number>();
 const RECIENTES_MAX = 25;
 
+/** Ventana para sospechar que un mismo pago fue avisado por DOS apps
+ *  distintas (p.ej. pagaste con Yape y avisaron la app Yape y también
+ *  la app del banco, con el mismo monto a los pocos minutos). El
+ *  segundo aviso va a revisión con nota: nunca se duplica en silencio
+ *  ni se descarta — lo decide el usuario con un toque. */
+const VENTANA_CRUZADA_MS = 3 * 60_000;
+
 function esDuplicadaReciente(c: CapturaNotif, parse: { monto: number; direccion: string; descripcion: string }): boolean {
   const clave = `${c.pkg}|${parse.direccion}|${parse.monto}|${parse.descripcion}`;
   const ahora = Date.now();
@@ -352,6 +360,30 @@ export function procesarCapturas(
 
     const cuenta = prefs.cuentasMap[c.pkg] || cuentaPorDefecto(c.pkg);
     const categoria = categoriaPara(parse.direccion, parse.descripcion, est);
+
+    // Guarda Yape↔banco: ¿otra app ya registró el MISMO monto y dirección
+    // hace menos de 3 minutos? Es el patrón del pago con Yape avisado por
+    // dos apps (la de Yape + la del banco). El primero ya quedó registrado:
+    // este va a revisión con nota, para no duplicar el gasto en silencio.
+    const dobleCruzado = log.find(
+      (l) => l.estado === 'importada' &&
+             l.pkg !== c.pkg &&
+             l.parse != null &&
+             l.parse.monto === parse.monto &&
+             l.parse.direccion === parse.direccion &&
+             c.ts - l.ts >= 0 &&
+             c.ts - l.ts <= VENTANA_CRUZADA_MS,
+    );
+    if (dobleCruzado) {
+      log.unshift({
+        id, ts: c.ts, pkg: c.pkg, title: c.title, text: c.text,
+        estado: 'revision',
+        nota: `Mismo monto recién registrado por ${labelApp(dobleCruzado.pkg)}. Si es el mismo pago, ignóralo.`,
+        parse: { monto: parse.monto, direccion: parse.direccion, descripcion: parse.descripcion, categoria },
+      });
+      enRevision++;
+      continue;
+    }
 
     if (prefs.modo === 'revision') {
       if (!yaEnLog) {

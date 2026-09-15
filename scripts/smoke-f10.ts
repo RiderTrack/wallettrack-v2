@@ -286,6 +286,43 @@ console.log('\n[12] guard · sugerencias del diccionario válidas por tipo');
   check(faltantesGasto.length === 0, `toda sugerencia existe en gasto o ingreso (${faltantesGasto.join(', ') || 'ok'})`);
 }
 
+console.log('\n[13] guarda Yape↔banco · doble aviso del mismo pago por 2 apps');
+limpiar();
+{
+  const est = leerEstado();
+  const prefs = prefsDePrueba();
+  const T = Date.now() - 600_000;
+
+  // Pagaste con Yape: la app Yape avisa primero
+  const r1 = procesarCapturas([captura(YAPE, 'Yape', 'Yapeaste S/ 25.00 a TIENDA X', T)], est, prefs);
+  check(r1.creadas.length === 1, 'aviso de la app Yape → 1 tx');
+
+  // 40s después la app del banco avisa el MISMO pago (otro texto, otra app)
+  const r2 = procesarCapturas([captura(BCP, 'BCP', 'Pago con Yape S/ 25.00', T + 40_000)], r1.estado, r1.prefs);
+  check(r2.creadas.length === 0 && r2.enRevision === 1, 'mismo monto+dirección de otra app <3min → a revisión (no duplica)');
+  const enRev = leerLogCaptura().find((l) => l.estado === 'revision' && !!l.nota);
+  check(!!enRev && enRev.nota.includes('Yape'), 'la revisión trae la nota que nombra a la otra app');
+
+  // ¿Eran pagos distintos? El usuario toca Registrar → crea la 2da tx
+  const r3 = enRev ? resolverRevisionComoImportada(enRev.id, r2.estado) : { ok: false, estado: r2.estado };
+  check(r3.ok && r3.estado.transactions.length === 2, 'registrar la revisión → 2da tx (pagos distintos)');
+
+  // A más de 3 min de distancia ya NO se sospecha → se registra normal
+  const prefs2 = prefsDePrueba();
+  const r4 = procesarCapturas([
+    captura(YAPE, 'Yape', 'Yapeaste S/ 25.00 a OTRA TIENDA', T + 10 * 60_000),
+  ], est, prefs2);
+  check(r4.creadas.length === 1, 'aviso de otra app a >3 min → se registra normal');
+
+  // Las dos notificaciones llegan JUNTAS en el mismo drenaje (app cerrada)
+  limpiar();
+  const r5 = procesarCapturas([
+    captura(YAPE, 'Yape', 'Yapeaste S/ 15.00 a CAFETERIA LOCA', T),
+    captura(BCP, 'BCP', 'Pago con Yape S/ 15.00', T + 30_000),
+  ], leerEstado(), prefsDePrueba());
+  check(r5.creadas.length === 1 && r5.enRevision === 1, 'mismo lote: 1 importada + 1 en revisión con nota');
+}
+
 // Resumen
 console.log(`\n══════════════════════════════════════════════`);
 console.log(`SMOKE F10: ${ok} OK · ${fail} FAIL`);
